@@ -7,4 +7,12 @@
 
 import { Display } from "./third-party/rotjs/index.js";
 
-console.log("Hello, world");
+const display = new Display({
+    width: 80,
+    height: 50,
+    fontFamily: "Courier Prime",
+    fontSize: 18,
+});
+document.body.append(display.getContainer());
+
+display.draw(1, 1, "@");
