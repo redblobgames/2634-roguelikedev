@@ -13,6 +13,20 @@ const display = new Display({
     fontFamily: "Courier Prime",
     fontSize: 18,
 });
-document.body.append(display.getContainer());
+const canvas = display.getContainer();
+document.querySelector("#game").append(canvas);
 
-display.draw(1, 1, "@");
+display.draw(1, 1, '@');
+
+canvas.setAttribute('tabindex', "1");
+canvas.addEventListener('keydown', handleKeyDown);
+
+const focusReminder = document.getElementById('focus-reminder');
+canvas.addEventListener('blur', () => { focusReminder.style.visibility = 'visible'; });
+canvas.addEventListener('focus', () => { focusReminder.style.visibility = 'hidden'; });
+canvas.focus();
+
+function handleKeyDown(event) {
+    console.log("Keydown event:", event);
+}
+
