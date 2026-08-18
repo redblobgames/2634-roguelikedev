@@ -1,0 +1,35 @@
+[[https://unmaintained.tech/badge.svg]]
+
+Each summer, the [[https://old.reddit.com/r/roguelikedev/][r/roguelikedev]] community has a [[https://old.reddit.com/r/roguelikedev/wiki/python_tutorial_series][tutorial series]] where we all follow along to build a Roguelike game.  I participated in this event in 2018, 2020, 2021, 2022, 2023. [[https://old.reddit.com/r/roguelikedev/comments/1vfs4rs/roguelikedev_does_the_complete_roguelike_tutorial/p4xqv2d/][I'm trying again in 2026]].
+
+I'm not actually wanting to write a Roguelike game. I make games to learn other things. This year's goals:
+
+1. *Jujutsu* version control instead of Git
+
+   As part of using Jujutsu, I want to go back and edit previous commits. For example if I'm working on Part 5 of the tutorial and realize that the map should be a different size, I'd normally add a commit changing the size. But for this project, I'm going to go /back/ to Part 2 where I set the map size, and edit it there. Jujutsu will then propagate that change forwards as best it can. Normally Jujutsu will prevent this if I've pushed the changes to GitHub. I disabled that by setting the config option ~[revset-aliases] "immutable_heads()" = "none()"~.
+
+   This also means that my GitHub history will be /rewritten/ often.
+   Since I'm the only author on this project I think that's ok.
+   But it will probably break anyone who forks or clones the
+   project.
+
+2. A *spreadsheet* as the main data structure (instead of OOP or ECS)
+
+   I think this is will be the biggest challenge. I don't have enough experience with this to know how to structure the data. Some features may not be a good fit. I'll learn a lot with this attempt.
+   
+   In addition to the internal data structures being tables, I want to have:
+   
+   - indexes for fast lookup (for example, find all entities on a tile)
+   - UI for editing the spreadsheet data while the game is running
+   - formulas that automatically update when their underlying cells change
+
+3. Embrace *Javascript* features instead of wishing it were some other language
+
+   This includes embracing no-build-step, modules, dynamic typing, proxies, prototype inheritance, properties, run time code generation, and the =with= statement.
+
+I learn best by focusing on one or two things at a time instead of trying to learn everything at once. I decided I will *not* try some new things:
+
+- I'm using <canvas> for the game area and HTML for the UI elements, just like I did in 2020.
+- I'm going to use ROT.js's built-in features (console display, map generation, pathfinding, field of view) instead of writing my own like I did in 2020, 2021.
+- I'm going to follow the tutorial's game design instead of trying new things like I did in 2021, 2022, 2023.
+
