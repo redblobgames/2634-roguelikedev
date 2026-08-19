@@ -5,7 +5,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Display, RNG } from "./third-party/rotjs/index.js";
+import { Display, RNG, Map as RotMap } from "./third-party/rotjs/index.js";
 
 RNG.setSeed(1234);
 
@@ -65,8 +65,8 @@ function keyToAction(event) {
 /** @type{Record<EntityType, EntityData>} */
 const ENTITY_DATA = {
     player: {shape: "@", fg: "hsl(60 100% 50%)"},
-    troll:  {shape: "T", fg: "hsl(120 60% 50%)"},
-    orc:    {shape: "o", fg: "hsl(100 30% 50%)"},
+    troll:  {shape: "T", fg: "hsl(120 60% 40%)"},
+    orc:    {shape: "o", fg: "hsl(100 30% 40%)"},
 };
 
 let world = {
@@ -102,6 +102,17 @@ function createTile(type, {x, y}) {
     return tile;
 }
 
+function generateDungeon() {
+    const types = ['floor', 'wall'];
+    const digger = new RotMap.Uniform(screenSize.x, screenSize.y, {
+        roomWidth: [4, 8],
+        roomHeight: [3, 6],
+        roomDugPercentage: 70,
+        timeLimit: 500,
+    });
+    digger.create((x, y, contents) => createTile(types[contents], {x, y}));
+}
+
 /**
  * @param {KeyboardEvent} event
  */
@@ -115,8 +126,12 @@ function handleKeyDown(event) {
 
     switch (action.type) {
         case 'move':
-            player.location.x += action.dx;
-            player.location.y += action.dy;
+            let newX = player.location.x + action.dx;
+            let newY = player.location.y + action.dy;
+            if (world.tiles.find((tile) => tile.position.x === newX && tile.position.y === newY)?.walkable) {
+                player.location.x = newX;
+                player.location.y = newY;
+            }
             break;
     }
 
@@ -175,4 +190,5 @@ function drawTable() {
 
 let player = createEntity('player', {x: Math.floor(screenSize.x / 2), y: Math.floor(screenSize.y / 2)});
 createEntity('troll', {x: 20, y: 10});
+generateDungeon();
 drawAll();
