@@ -9,7 +9,7 @@ import { Display, RNG } from "./third-party/rotjs/index.js";
 
 RNG.setSeed(1234);
 
-const screenSize = {x: 80, y: 50};
+const screenSize = {x: 40, y: 25};
 const display = new Display({
     width: screenSize.x,
     height: screenSize.y,
@@ -56,7 +56,7 @@ function keyToAction(event) {
  * @typedef {'player'|'troll'|'orc'} EntityType
  * @typedef {{x: number, y: number}} Position
  * @typedef {{shape: string, fg: string}} EntityData
- * @typedef {EntityData & {id: number, type: EntityType, position: Position}} Entity
+ * @typedef {EntityData & {id: number, type: EntityType, location: Position}} Entity
  */
 
 /** @type{Record<EntityType, EntityData>} */
@@ -67,7 +67,7 @@ const ENTITY_DATA = {
 };
 
 let world = {
-    _nextEntityId: 1,
+    _nextEntityId: 0,
     entities: /** @type{Array<Entity>} */([]),
 };
 
@@ -75,11 +75,11 @@ let world = {
  * Creates a game object such as the player, monster, or item.
  *
  * @param {EntityType} type
- * @param {Position} position
+ * @param {Position} location
  */
 function createEntity(type, {x, y}) {
     let id = ++world._nextEntityId;
-    let entity = Object.assign(Object.create(ENTITY_DATA[type]), {id, type, position: {x, y}});
+    let entity = Object.assign(Object.create(ENTITY_DATA[type]), {id, type, location: {x, y}});
     world.entities.push(entity);
     return entity;
 }
@@ -97,12 +97,12 @@ function handleKeyDown(event) {
 
     switch (action.type) {
         case 'move':
-            player.position.x += action.dx;
-            player.position.y += action.dy;
+            player.location.x += action.dx;
+            player.location.y += action.dy;
             break;
     }
 
-    drawWorld();
+    drawAll();
 }
 
 /**
@@ -110,7 +110,7 @@ function handleKeyDown(event) {
  */
 function drawCharacter(entity) {
     display.draw(
-        entity.position.x, entity.position.y,
+        entity.location.x, entity.location.y,
         entity.shape, entity.fg,
         "black"
     );
@@ -119,6 +119,17 @@ function drawCharacter(entity) {
 let player = createEntity('player', {x: Math.floor(screenSize.x / 2), y: Math.floor(screenSize.y / 2)});
 createEntity('troll', {x: 20, y: 10});
 
+function formatValue(value) {
+    if (Array.isArray(value)) return JSON.stringify(value);
+    if (typeof value === 'object') return Object.entries(value).map(([key, v]) => `${key}: ${JSON.stringify(v)}`).join(", ");
+    return value.toString();
+}
+
+function drawAll() {
+    drawWorld();
+    drawTable();
+}
+
 function drawWorld() {
     display.clear();
     for (let entity of world.entities) {
@@ -126,4 +137,22 @@ function drawWorld() {
     }
 }
 
-drawWorld();
+function drawTable() {
+    const columns = ['id', 'type', 'location', 'shape', 'fg'];
+    let table = `<table rules=all border=all><thead><tr>`;
+    for (let column of columns) {
+        table += `<th>${column}</th>`;
+    }
+    table += `</tr></thead><tbody>`;
+    for (let entity of world.entities) {
+        table += `<tr>`;
+        for (let column of columns) {
+            table += `<td>${formatValue(entity[column])}</td>`;
+        }
+        table += `</tr>`;
+    }
+    table += `</tbody></table>`;
+    document.querySelector("#world-entities").innerHTML = table;
+}
+
+drawAll();
