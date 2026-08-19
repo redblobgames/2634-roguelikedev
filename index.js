@@ -57,6 +57,9 @@ function keyToAction(event) {
  * @typedef {{x: number, y: number}} Position
  * @typedef {{shape: string, fg: string}} EntityData
  * @typedef {EntityData & {id: number, type: EntityType, location: Position}} Entity
+ * @typedef {'floor'|'wall'} TileType
+ * @typedef {{shape: string, fg: string, bg: string, walkable: boolean, transparent: boolean, darkBg: string}} TileData
+ * @typedef {TileData & {type: TileType, position: Position}} Tile
  */
 
 /** @type{Record<EntityType, EntityData>} */
@@ -69,6 +72,7 @@ const ENTITY_DATA = {
 let world = {
     _nextEntityId: 0,
     entities: /** @type{Array<Entity>} */([]),
+    tiles: /** @type{Array<Tile>} */([]),
 };
 
 /**
@@ -82,6 +86,20 @@ function createEntity(type, {x, y}) {
     let entity = Object.assign(Object.create(ENTITY_DATA[type]), {id, type, location: {x, y}});
     world.entities.push(entity);
     return entity;
+}
+
+const TILE_DATA = {
+    floor: {walkable: true,  transparent: true,  shape: '·', fg: "hsl(60 50% 50%)", bg: "black", darkBg: "hsl(240 50% 40%)"},
+    wall:  {walkable: false, transparent: false, shape: '#', fg: "hsl(60 10% 40%)", bg: "gray",  darkBg: "hsl(240 100% 20%)"},
+};
+
+/**
+ * Creates the game map
+ */
+function createTile(type, {x, y}) {
+    let tile = Object.assign(Object.create(TILE_DATA[type]), {type, position: {x, y}});
+    world.tiles.push(tile);
+    return tile;
 }
 
 /**
@@ -116,9 +134,6 @@ function drawCharacter(entity) {
     );
 }
 
-let player = createEntity('player', {x: Math.floor(screenSize.x / 2), y: Math.floor(screenSize.y / 2)});
-createEntity('troll', {x: 20, y: 10});
-
 function formatValue(value) {
     if (Array.isArray(value)) return JSON.stringify(value);
     if (typeof value === 'object') return Object.entries(value).map(([key, v]) => `${key}: ${JSON.stringify(v)}`).join(", ");
@@ -132,6 +147,9 @@ function drawAll() {
 
 function drawWorld() {
     display.clear();
+    for (let tile of world.tiles) {
+        display.draw(tile.position.x, tile.position.y, tile.shape, tile.fg, tile.bg);
+    }
     for (let entity of world.entities) {
         drawCharacter(entity);
     }
@@ -155,4 +173,6 @@ function drawTable() {
     document.querySelector("#world-entities").innerHTML = table;
 }
 
+let player = createEntity('player', {x: Math.floor(screenSize.x / 2), y: Math.floor(screenSize.y / 2)});
+createEntity('troll', {x: 20, y: 10});
 drawAll();
