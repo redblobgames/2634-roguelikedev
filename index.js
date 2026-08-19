@@ -9,11 +9,6 @@ import { Display, RNG } from "./third-party/rotjs/index.js";
 
 RNG.setSeed(1234);
 
-/** Some type definitions
- *
- * @typedef {{x: number, y: number}} Position
- */
-
 const screenSize = {x: 80, y: 50};
 const display = new Display({
     width: screenSize.x,
@@ -32,15 +27,14 @@ canvas.addEventListener('blur', () =>  { focusReminder.style.visibility = 'visib
 canvas.addEventListener('focus', () => { focusReminder.style.visibility = 'hidden'; });
 canvas.focus();
 
-/** Event handlers
+/**
+ * Determine which action occurs when a key is pressed.
  *
  * @typedef {
        {type: 'move', dx: number, dy: number}
      | {type: 'none'}
    } Action
- */
-
-/**
+ *
  * @param {KeyboardEvent} event
  * @returns {Action}
  */
@@ -57,6 +51,40 @@ function keyToAction(event) {
 }
 
 /**
+ * Stores information about the entire game world
+ *
+ * @typedef {'player'|'troll'|'orc'} EntityType
+ * @typedef {{x: number, y: number}} Position
+ * @typedef {{shape: string, fg: string}} EntityData
+ * @typedef {EntityData & {id: number, type: EntityType, position: Position}} Entity
+ */
+
+/** @type{Record<EntityType, EntityData>} */
+const ENTITY_DATA = {
+    player: {shape: "@", fg: "hsl(60 100% 50%)"},
+    troll:  {shape: "T", fg: "hsl(120 60% 50%)"},
+    orc:    {shape: "o", fg: "hsl(100 30% 50%)"},
+};
+
+let world = {
+    _nextEntityId: 1,
+    entities: /** @type{Array<Entity>} */([]),
+};
+
+/**
+ * Creates a game object such as the player, monster, or item.
+ *
+ * @param {EntityType} type
+ * @param {Position} position
+ */
+function createEntity(type, {x, y}) {
+    let id = ++world._nextEntityId;
+    let entity = Object.assign(Object.create(ENTITY_DATA[type]), {id, type, position: {x, y}});
+    world.entities.push(entity);
+    return entity;
+}
+
+/**
  * @param {KeyboardEvent} event
  */
 function handleKeyDown(event) {
@@ -69,19 +97,33 @@ function handleKeyDown(event) {
 
     switch (action.type) {
         case 'move':
-            player.x += action.dx;
-            player.y += action.dy;
+            player.position.x += action.dx;
+            player.position.y += action.dy;
             break;
     }
 
     drawWorld();
 }
 
-let player = {x: Math.floor(screenSize.x / 2), y: Math.floor(screenSize.y / 2)};
+/**
+ * @param {Entity} entity
+ */
+function drawCharacter(entity) {
+    display.draw(
+        entity.position.x, entity.position.y,
+        entity.shape, entity.fg,
+        "black"
+    );
+}
+
+let player = createEntity('player', {x: Math.floor(screenSize.x / 2), y: Math.floor(screenSize.y / 2)});
+createEntity('troll', {x: 20, y: 10});
 
 function drawWorld() {
     display.clear();
-    display.draw(player.x, player.y, '@', "white", "black");
+    for (let entity of world.entities) {
+        drawCharacter(entity);
+    }
 }
 
 drawWorld();
