@@ -51,56 +51,106 @@ function keyToAction(event) {
 }
 
 /**
+ * Generic table of rows for storing game data (map tiles, world entities)
+ *
+ * The schema will be the instance properties mapped to a boolean indicating whether they should be indexed.
+ * The prototypes will be additional properties looked up with the 'type' as the key. These properties will
+ * not be indexed.
+ */
+class Table {
+    constructor(schema, prototypes) {
+        this.schema = {
+            id: true,
+            type: true,
+            ...schema,
+            ...Object.fromEntries(
+                Object.keys(prototypes[Object.keys(prototypes)[0]])
+                    .map((key) => [key, false]))
+        };
+        this.prototypes = prototypes;
+        this.columns = Object.keys(this.schema);
+        this.blank = Object.fromEntries(this.columns.map((key) => [key, null]));
+        this._nextId = 0;
+        this.rows = [];
+    }
+
+    create(type, init) {
+        let id = ++this._nextId;
+        let entity = {...this.blank, ...this.prototypes[type], id, type, ...init};
+        this.rows.push(entity);
+        return entity;
+    }
+
+    /**
+     * Find rows that match a query
+     *
+     * @param {Record<string, boolean|number|string|object|array>} query
+       contains component names and patterns, and the patterns can be:
+
+         - boolean|number|string -- equality
+         - array -- equality for each element (1 level deep)
+         - object -- every key/value in the object must be present and equal,
+                     but it's ok if the row has additional fields in that component
+     */
+    findAll(query) {
+        return this.rows.filter((row) => {
+            for (let [key, pattern] of Object.entries(query)) {
+                let testAgainst = row[key];
+                if (Array.isArray(pattern)) {
+                    if (!Array.isArray(testAgainst)) return false;
+                    if (pattern.length !== testAgainst.length) return false;
+                    for (let i = 0; i < pattern.length; i++) {
+                        if (pattern[i] !== testAgainst[i]) return false;
+                    }
+                } else if (typeof pattern === 'object') {
+                    if (typeof testAgainst !== 'object') return false;
+                    for (let [key, value] of Object.entries(pattern)) {
+                        if (value !== testAgainst[key]) return false;
+                    }
+                    return true;
+                } else {
+                    if (pattern !== testAgainst) return false;
+                }
+            }
+            return true;
+        });
+    }
+
+    findOne(query) {
+        let results = this.findAll(query);
+        if (results.length !== 1) throw `findOne() matched ${results.length} rows`;
+        return results[0];
+    }
+
+    findMaybe(query) {
+        let results = this.findAll(query);
+        if (results.length === 0) return null;
+        if (results.length !== 1) throw `findMaybe() matched ${results.length} rows`;
+        return results[0];
+    }
+
+}
+
+/**
  * Stores information about the entire game world
- *
- * @typedef {'player'|'troll'|'orc'} EntityType
- * @typedef {{x: number, y: number}} Position
- * @typedef {{shape: string, fg: string}} EntityData
- * @typedef {EntityData & {id: number, type: EntityType, location: Position}} Entity
- * @typedef {'floor'|'wall'} TileType
- * @typedef {{shape: string, fg: string, bg: string, walkable: boolean, transparent: boolean, darkBg: string}} TileData
- * @typedef {TileData & {type: TileType, position: Position}} Tile
  */
-
-/** @type{Record<EntityType, EntityData>} */
-const ENTITY_DATA = {
-    player: {shape: "@", fg: "hsl(60 100% 50%)"},
-    troll:  {shape: "T", fg: "hsl(120 60% 40%)"},
-    orc:    {shape: "o", fg: "hsl(100 30% 40%)"},
-};
-
 let world = {
-    _nextEntityId: 0,
-    entities: /** @type{Array<Entity>} */([]),
-    tiles: /** @type{Array<Tile>} */([]),
+    entities: new Table(
+        {location: 'position'},
+        {
+            player: {shape: "@", fg: "hsl(60 100% 50%)"},
+            troll:  {shape: "T", fg: "hsl(120 60% 50%)"},
+            orc:    {shape: "o", fg: "hsl(100 30% 50%)"},
+        }
+    ),
+    tiles: new Table(
+        {},
+        {
+            floor: {walkable: true,  transparent: true,  shape: '·', fg: "hsl(60 50% 50%)", bg: "black", darkBg: "hsl(240 50% 40%)"},
+            wall:  {walkable: false, transparent: false, shape: '#', fg: "hsl(60 10% 40%)", bg: "gray",  darkBg: "hsl(240 100% 20%)"},
+        }
+    ),
 };
-
-/**
- * Creates a game object such as the player, monster, or item.
- *
- * @param {EntityType} type
- * @param {Position} location
- */
-function createEntity(type, {x, y}) {
-    let id = ++world._nextEntityId;
-    let entity = Object.assign(Object.create(ENTITY_DATA[type]), {id, type, location: {x, y}});
-    world.entities.push(entity);
-    return entity;
-}
-
-const TILE_DATA = {
-    floor: {walkable: true,  transparent: true,  shape: '·', fg: "hsl(60 50% 50%)", bg: "black", darkBg: "hsl(240 50% 40%)"},
-    wall:  {walkable: false, transparent: false, shape: '#', fg: "hsl(60 10% 40%)", bg: "gray",  darkBg: "hsl(240 100% 20%)"},
-};
-
-/**
- * Creates the game map
- */
-function createTile(type, {x, y}) {
-    let tile = Object.assign(Object.create(TILE_DATA[type]), {type, position: {x, y}});
-    world.tiles.push(tile);
-    return tile;
-}
 
 function generateDungeon() {
     const types = ['floor', 'wall'];
@@ -110,7 +160,7 @@ function generateDungeon() {
         roomDugPercentage: 70,
         timeLimit: 500,
     });
-    digger.create((x, y, contents) => createTile(types[contents], {x, y}));
+    digger.create((x, y, contents) => world.tiles.create(types[contents], {position: {x, y}}));
 }
 
 /**
@@ -128,7 +178,8 @@ function handleKeyDown(event) {
         case 'move':
             let newX = player.location.x + action.dx;
             let newY = player.location.y + action.dy;
-            if (world.tiles.find((tile) => tile.position.x === newX && tile.position.y === newY)?.walkable) {
+            let tile = world.tiles.findMaybe({walkable: true, position: {x: newX, y: newY}});
+            if (tile) {
                 player.location.x = newX;
                 player.location.y = newY;
             }
@@ -138,9 +189,6 @@ function handleKeyDown(event) {
     drawAll();
 }
 
-/**
- * @param {Entity} entity
- */
 function drawCharacter(entity) {
     display.draw(
         entity.location.x, entity.location.y,
@@ -157,38 +205,38 @@ function formatValue(value) {
 
 function drawAll() {
     drawWorld();
-    drawTable();
+    drawTable("#world-entities", world.entities);
 }
 
 function drawWorld() {
     display.clear();
-    for (let tile of world.tiles) {
+    for (let tile of world.tiles.rows) {
         display.draw(tile.position.x, tile.position.y, tile.shape, tile.fg, tile.bg);
     }
-    for (let entity of world.entities) {
+    for (let entity of world.entities.rows.toReversed()) {
         drawCharacter(entity);
     }
 }
 
-function drawTable() {
-    const columns = ['id', 'type', 'location', 'shape', 'fg'];
-    let table = `<table rules=all border=all><thead><tr>`;
-    for (let column of columns) {
-        table += `<th>${column}</th>`;
+function drawTable(selector, table) {
+    let html = `<table rules=all border=all><thead><tr>`;
+    for (let column of table.columns) {
+        html += `<th>${column}</th>`;
     }
-    table += `</tr></thead><tbody>`;
-    for (let entity of world.entities) {
-        table += `<tr>`;
-        for (let column of columns) {
-            table += `<td>${formatValue(entity[column])}</td>`;
+    html += `</tr></thead><tbody>`;
+    for (let entity of table.rows) {
+        html += `<tr>`;
+        for (let column of table.columns) {
+            html += `<td>${formatValue(entity[column])}</td>`;
         }
-        table += `</tr>`;
+        html += `</tr>`;
     }
-    table += `</tbody></table>`;
-    document.querySelector("#world-entities").innerHTML = table;
+    html += `</tbody></table>`;
+    document.querySelector(selector).innerHTML = html;
 }
 
-let player = createEntity('player', {x: Math.floor(screenSize.x / 2), y: Math.floor(screenSize.y / 2)});
-createEntity('troll', {x: 20, y: 10});
 generateDungeon();
+let player = world.entities.create('player', {location: {type: 'map', x: Math.floor(screenSize.x / 2), y: Math.floor(screenSize.y / 2)}});
+world.entities.create('troll', {location: {type: 'map', x: 20, y: 10}});
+
 drawAll();
