@@ -6,12 +6,26 @@
     <style>
         #game canvas { display: block; margin: auto; }
         #focus-reminder { text-align: center; }
+        #world-entities {
+            margin-left: 10em;
+            font-family: monospace;
+            th {
+                background: #eee;
+            }
+            td:first-child {
+                font-weight: bold;
+            }
+            td {
+                padding: 4px;
+            }
+        }
     </style>
   </head>
   <body>
     <figure>
       <div id="game"></div>
       <div id="focus-reminder">click game to focus</div>
+      <div id="world-entities"></div>
     </figure>
   </body>
 </html>
