@@ -9,6 +9,7 @@ import { Display, RNG, Map as RotMap, FOV } from "./third-party/rotjs/index.js";
 import { Table } from "./table.js";
 
 RNG.setSeed(1234);
+const randint = RNG.getUniformInt.bind(RNG);
 
 const screenSize = {x: 40, y: 25};
 const display = new Display({
@@ -71,6 +72,7 @@ let world = {
             wall:  {walkable: false, transparent: false},
         }
     ),
+    player: null,
 };
 
 function generateDungeon() {
@@ -83,6 +85,29 @@ function generateDungeon() {
     });
     digger.create((x, y, contents) =>
         world.tiles.create(types[contents], {position: {x, y}, light: 0, maxLight: 0}));
+
+    let rooms = digger.getRooms();
+
+    // Create the player, or move existing player to this map
+    let [playerX, playerY] = rooms[0].getCenter();
+    let playerLocation = {type: 'map', x: playerX, y: playerY};
+    if (!world.player) world.player = world.entities.create('player', {location: playerLocation})
+    else               world.player.location = playerLocation;
+
+    // Create monsters in each room
+    const maxMonstersPerRoom = 3;
+    for (let room of rooms.slice(1)) { // No monsters in the player's starting room
+        let numMonsters = randint(0, maxMonstersPerRoom);
+        for (let i = 0; i < numMonsters; i++) {
+            let x = randint(room.getLeft(), room.getRight()),
+                y = randint(room.getTop(), room.getBottom());
+            let location = {type: 'map', x, y};
+            if (!world.entities.findAny({location})) {
+                let type = randint(0, 3) === 0? 'troll' : 'orc';
+                world.entities.create(type, {location});
+            }
+        }
+    }
 }
 
 /**
@@ -98,11 +123,11 @@ function handleKeyDown(event) {
 
     switch (action.type) {
         case 'move':
-            let newX = player.location.x + action.dx;
-            let newY = player.location.y + action.dy;
+            let newX = world.player.location.x + action.dx;
+            let newY = world.player.location.y + action.dy;
             let tile = world.tiles.findAny({walkable: true, position: {x: newX, y: newY}});
             if (tile) {
-                player.location = {type: 'map', x: newX, y: newY};
+                world.player.location = {type: 'map', x: newX, y: newY};
             }
             break;
     }
@@ -127,7 +152,8 @@ function drawAll() {
     for (let tile of world.tiles.rows) {
         tile.light = 0;
     }
-    fov.compute(player.location.x, player.location.y, 10, (x, y, r, light) => {
+    fov.compute(world.player.location.x, world.player.location.y, 10,
+        (x, y, r, light) => {
         let tile = world.tiles.findAny({position: {x, y}});
         if (tile) {
             tile.light = light;
@@ -206,7 +232,4 @@ function drawTable(selector, table) {
 }
 
 generateDungeon();
-let player = world.entities.create('player', {location: {type: 'map', x: Math.floor(screenSize.x / 2), y: Math.floor(screenSize.y / 2)}});
-world.entities.create('troll', {location: {type: 'map', x: 20, y: 10}});
-
 drawAll();
