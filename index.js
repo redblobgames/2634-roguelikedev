@@ -6,6 +6,7 @@
  */
 
 import { Display, RNG, Map as RotMap, FOV } from "./third-party/rotjs/index.js";
+import { Table } from "./table.js";
 
 RNG.setSeed(1234);
 
@@ -50,93 +51,12 @@ function keyToAction(event) {
     return action;
 }
 
-/**
- * Generic table of rows for storing game data (map tiles, world entities)
- *
- * The schema will be the instance properties mapped to a boolean indicating whether they should be indexed.
- * The prototypes will be additional properties looked up with the 'type' as the key. These properties will
- * not be indexed.
- */
-class Table {
-    constructor(schema, prototypes) {
-        this.schema = {
-            id: true,
-            type: true,
-            ...schema,
-            ...Object.fromEntries(
-                Object.keys(prototypes[Object.keys(prototypes)[0]])
-                    .map((key) => [key, false]))
-        };
-        this.prototypes = prototypes;
-        this.columns = Object.keys(this.schema);
-        this.blank = Object.fromEntries(this.columns.map((key) => [key, null]));
-        this._nextId = 0;
-        this.rows = [];
-    }
-
-    create(type, init) {
-        let id = ++this._nextId;
-        let entity = {...this.blank, ...this.prototypes[type], id, type, ...init};
-        this.rows.push(entity);
-        return entity;
-    }
-
-    /**
-     * Find rows that match a query
-     *
-     * @param {Record<string, boolean|number|string|object|array>} query
-       contains component names and patterns, and the patterns can be:
-
-         - boolean|number|string -- equality
-         - array -- equality for each element (1 level deep)
-         - object -- every key/value in the object must be present and equal,
-                     but it's ok if the row has additional fields in that component
-     */
-    findAll(query) {
-        return this.rows.filter((row) => {
-            for (let [key, pattern] of Object.entries(query)) {
-                let testAgainst = row[key];
-                if (Array.isArray(pattern)) {
-                    if (!Array.isArray(testAgainst)) return false;
-                    if (pattern.length !== testAgainst.length) return false;
-                    for (let i = 0; i < pattern.length; i++) {
-                        if (pattern[i] !== testAgainst[i]) return false;
-                    }
-                } else if (typeof pattern === 'object') {
-                    if (typeof testAgainst !== 'object') return false;
-                    for (let [key, value] of Object.entries(pattern)) {
-                        if (value !== testAgainst[key]) return false;
-                    }
-                    return true;
-                } else {
-                    if (pattern !== testAgainst) return false;
-                }
-            }
-            return true;
-        });
-    }
-
-    findOne(query) {
-        let results = this.findAll(query);
-        if (results.length !== 1) throw `findOne() matched ${results.length} rows`;
-        return results[0];
-    }
-
-    findAny(query) {
-        let results = this.findAll(query);
-        if (results.length === 0) return null;
-        if (results.length !== 1) throw `findMaybe() matched ${results.length} rows`;
-        return results[0];
-    }
-
-}
 
 /**
  * Stores information about the entire game world
  */
 let world = {
-    entities: new Table(
-        {location: 'position'},
+    entities: new Table('Entities', ['location'],
         {
             // NOTE: fg must be hsl(h s l) or rgb(r g b) with no alpha
             // because we manipulate the color string elsewhere
@@ -145,8 +65,7 @@ let world = {
             orc:    {shape: "o", fg: "hsl(100 30% 50%)"},
         }
     ),
-    tiles: new Table(
-        {},
+    tiles: new Table('Tiles', ['position', 'light', 'maxLight'],
         {
             floor: {walkable: true,  transparent: true },
             wall:  {walkable: false, transparent: false},
@@ -183,8 +102,7 @@ function handleKeyDown(event) {
             let newY = player.location.y + action.dy;
             let tile = world.tiles.findAny({walkable: true, position: {x: newX, y: newY}});
             if (tile) {
-                player.location.x = newX;
-                player.location.y = newY;
+                player.location = {type: 'map', x: newX, y: newY};
             }
             break;
     }
@@ -193,8 +111,13 @@ function handleKeyDown(event) {
 }
 
 function formatValue(value) {
+    if (value === null) return "(null)";
     if (Array.isArray(value)) return JSON.stringify(value);
-    if (typeof value === 'object') return Object.entries(value).map(([key, v]) => `${key}: ${JSON.stringify(v)}`).join(", ");
+    if (typeof value === 'object') {
+        return Object.entries(value)
+            .map(([key, v]) => `${key}: ${JSON.stringify(v)}`)
+            .join(", ");
+    }
     return value.toString();
 }
 
