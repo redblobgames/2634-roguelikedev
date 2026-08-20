@@ -5,7 +5,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Display, RNG, Map as RotMap } from "./third-party/rotjs/index.js";
+import { Display, RNG, Map as RotMap, FOV } from "./third-party/rotjs/index.js";
 
 RNG.setSeed(1234);
 
@@ -122,7 +122,7 @@ class Table {
         return results[0];
     }
 
-    findMaybe(query) {
+    findAny(query) {
         let results = this.findAll(query);
         if (results.length === 0) return null;
         if (results.length !== 1) throw `findMaybe() matched ${results.length} rows`;
@@ -138,6 +138,8 @@ let world = {
     entities: new Table(
         {location: 'position'},
         {
+            // NOTE: fg must be hsl(h s l) or rgb(r g b) with no alpha
+            // because we manipulate the color string elsewhere
             player: {shape: "@", fg: "hsl(60 100% 50%)"},
             troll:  {shape: "T", fg: "hsl(120 60% 50%)"},
             orc:    {shape: "o", fg: "hsl(100 30% 50%)"},
@@ -146,8 +148,8 @@ let world = {
     tiles: new Table(
         {},
         {
-            floor: {walkable: true,  transparent: true,  shape: '·', fg: "hsl(60 50% 50%)", bg: "black", darkBg: "hsl(240 50% 40%)"},
-            wall:  {walkable: false, transparent: false, shape: '#', fg: "hsl(60 10% 40%)", bg: "gray",  darkBg: "hsl(240 100% 20%)"},
+            floor: {walkable: true,  transparent: true },
+            wall:  {walkable: false, transparent: false},
         }
     ),
 };
@@ -160,7 +162,8 @@ function generateDungeon() {
         roomDugPercentage: 70,
         timeLimit: 500,
     });
-    digger.create((x, y, contents) => world.tiles.create(types[contents], {position: {x, y}}));
+    digger.create((x, y, contents) =>
+        world.tiles.create(types[contents], {position: {x, y}, light: 0, maxLight: 0}));
 }
 
 /**
@@ -178,7 +181,7 @@ function handleKeyDown(event) {
         case 'move':
             let newX = player.location.x + action.dx;
             let newY = player.location.y + action.dy;
-            let tile = world.tiles.findMaybe({walkable: true, position: {x: newX, y: newY}});
+            let tile = world.tiles.findAny({walkable: true, position: {x: newX, y: newY}});
             if (tile) {
                 player.location.x = newX;
                 player.location.y = newY;
@@ -189,32 +192,76 @@ function handleKeyDown(event) {
     drawAll();
 }
 
-function drawCharacter(entity) {
-    display.draw(
-        entity.location.x, entity.location.y,
-        entity.shape, entity.fg,
-        "black"
-    );
-}
-
 function formatValue(value) {
     if (Array.isArray(value)) return JSON.stringify(value);
     if (typeof value === 'object') return Object.entries(value).map(([key, v]) => `${key}: ${JSON.stringify(v)}`).join(", ");
     return value.toString();
 }
 
+const fov = new FOV.PreciseShadowcasting((x, y) => world.tiles.findAny({position: {x, y}})?.transparent);
+
 function drawAll() {
+    for (let tile of world.tiles.rows) {
+        tile.light = 0;
+    }
+    fov.compute(player.location.x, player.location.y, 10, (x, y, r, light) => {
+        let tile = world.tiles.findAny({position: {x, y}});
+        if (tile) {
+            tile.light = light;
+            tile.maxLight = Math.max(tile.maxLight, light);
+        }
+    });
     drawWorld();
     drawTable("#world-entities", world.entities);
+}
+
+const BG_COLOR = {
+    shroud: [0, 0, 0],
+    explored: {
+        floor: [50, 50, 150],
+        wall: [0, 0, 100],
+    },
+    visible: {
+        floor: [200, 180, 50],
+        wall: [130, 110, 50],
+    },
+};
+const lerp = (a, b, t) => a * (1-t) + b * t;
+const lerp3 = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+function bgColorAtTile(tile) {
+    let rgb = lerp3(
+        lerp3(
+            BG_COLOR.shroud,
+            BG_COLOR.explored[tile.type],
+            tile.maxLight
+        ),
+        BG_COLOR.visible[tile.type],
+        tile.light
+    );
+    return `rgb(${rgb})`;
 }
 
 function drawWorld() {
     display.clear();
     for (let tile of world.tiles.rows) {
-        display.draw(tile.position.x, tile.position.y, tile.shape, tile.fg, tile.bg);
+        // In the 2020 version of the Python tutorial, the tiles are
+        // blank and we only need to draw the background color.
+        display.draw(tile.position.x, tile.position.y, ' ',
+            "purple" /* should never see this */,
+            bgColorAtTile(tile)
+        );
     }
     for (let entity of world.entities.rows.toReversed()) {
-        drawCharacter(entity);
+        if (entity.location.type !== 'map') continue;
+        let position = {x: entity.location.x, y: entity.location.y};
+        let tile = world.tiles.findOne({position});
+
+        display.draw(
+            position.x, position.y,
+            entity.shape,
+            entity.fg.replace(")", ` / ${tile.light})`),
+            bgColorAtTile(tile)
+        );
     }
 }
 
