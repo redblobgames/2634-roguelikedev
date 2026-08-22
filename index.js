@@ -61,9 +61,9 @@ let world = {
         {
             // NOTE: fg must be hsl(h s l) or rgb(r g b) with no alpha
             // because we manipulate the color string elsewhere
-            player: {shape: "@", fg: "hsl(60 100% 50%)"},
-            troll:  {shape: "T", fg: "hsl(120 60% 50%)"},
-            orc:    {shape: "o", fg: "hsl(100 30% 50%)"},
+            player: {shape: "@", fg: "hsl(60 100% 50%)", blocksMovement: false},
+            troll:  {shape: "T", fg: "hsl(120 60% 50%)", blocksMovement: true},
+            orc:    {shape: "o", fg: "hsl(100 30% 50%)", blocksMovement: true},
         }
     ),
     tiles: new Table('Tiles', ['position', 'light', 'maxLight'],
@@ -111,6 +111,32 @@ function generateDungeon() {
 }
 
 /**
+ * Attempt to run the action
+ * @param {Action} action
+ * @returns {boolean} - true if the turn ends
+ */
+function handlePlayerAction(action) {
+    switch (action.type) {
+        case 'move':
+            let newX = world.player.location.x + action.dx;
+            let newY = world.player.location.y + action.dy;
+            let tile = world.tiles.findAny({walkable: true, position: {x: newX, y: newY}});
+            if (!tile) return false;
+
+            let blockingEntity = world.entities.findAny({blocksMovement: true, location: {type: 'map', x: newX, y: newY}});
+            if (blockingEntity) {
+                console.log(`You kick the ${blockingEntity.type}, much to its annoyance!`);
+                return true;
+            } else {
+                world.player.location = {type: 'map', x: newX, y: newY};
+                return true;
+            }
+    }
+
+    throw `Unknown action: ${JSON.stringify(action)}`;
+}
+
+/**
  * @param {KeyboardEvent} event
  */
 function handleKeyDown(event) {
@@ -121,18 +147,11 @@ function handleKeyDown(event) {
     if (action.type === 'none') return;
     event.preventDefault();
 
-    switch (action.type) {
-        case 'move':
-            let newX = world.player.location.x + action.dx;
-            let newY = world.player.location.y + action.dy;
-            let tile = world.tiles.findAny({walkable: true, position: {x: newX, y: newY}});
-            if (tile) {
-                world.player.location = {type: 'map', x: newX, y: newY};
-            }
-            break;
+    if (handlePlayerAction(action)) {
+        // let enemies move
+        console.log("TODO: Enemies should take their turn");
+        drawAll();
     }
-
-    drawAll();
 }
 
 function formatValue(value) {
