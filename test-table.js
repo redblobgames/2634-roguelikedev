@@ -76,3 +76,15 @@ test('Table queries check that the column exists', () => {
         table.findAll({nonexistent_column: true});
     });
 });
+
+test('Table skips indexing undefined values', () => {
+    let prototypes = { node: {} };
+    let table = new Table('test', ['position'], prototypes);
+
+    // Insert three rows, but only two should be indexed
+    let r1 = table.create('node', {});
+    let r2 = table.create('node', {position: 5});
+    let r3 = table.create('node', {position: null});
+
+    assert.strictEqual(table.indexes.position.size, 2);
+});
