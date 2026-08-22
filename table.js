@@ -10,33 +10,45 @@
  * additional properties looked up with the 'type' as the key. These
  * properties will not be indexed.
  *
- * Values in the table can be primitive (boolean, number, string) or
- * array of primitive or plain object with primitive keys. Nested
- * arrays or objects are not supported.
+ * Indexable/queryable values in the table can be undefined (for a
+ * missing value), primitive (null, boolean, number, string), or array
+ * of primitive or plain object with primitive keys. Nested arrays or
+ * objects cannot be indexed or queried.
  *
  * For now, the properties of a column (indexing, and later UI style)
  * are based on naming convention.
  */
 
 export class Table {
+    static ANY = Symbol('<any>');
+
     static INDEX = {
         id:       {unique: true,  static: true },
-        type:     {unique: false, static: true },
+        type:     {unique: false, static: false},
         position: {unique: true,  static: true }, // used with tiles, where only one can be in a location
         location: {unique: false, static: false}, // used with entities, where multiple can be in a location
     };
 
     constructor(name, columns, prototypes) {
         this.name = name;
-        this.prototypes = prototypes;
-        this.columns = /** @type{Array<string>} */(['id', 'type', ...columns, ...Object.keys(prototypes[Object.keys(prototypes)[0]])]);
+        this.object = {}; // the base class underneath all the prototypes
+        this.columns = /** @type{Set<string>} */(new Set(['id', 'type', ...columns]));
+        this.prototypes = prototypes; // these will be the prototypes underneath each row
+        this.prototypeColumns = /** @type{Set<string>} */(new Set());
+        for (let prototype of Object.values(prototypes)) {
+            Object.setPrototypeOf(prototype, this.object);
+            Object.freeze(prototype);
+            for (let column of Object.keys(prototype)) {
+                this.prototypeColumns.add(column);
+                Object.freeze(prototype[column]);
+            }
+        }
         this._nextId = 0;
         this.rows = /** @type{Array<object>} */([]);
         this.indexes = /** @type{Record<string, Map<number|string, Array<object>>>} */({});
 
         // Construct a prototype object for this table, and backing fields/indices
         const table = this;
-        this.proto = {};
         this.columnMap = /** @type{Record<string, string>} */({});
         for (let column of this.columns) {
             this.columnMap[column] = column;
@@ -46,12 +58,16 @@ export class Table {
                 this.indexes[column] = new Map();
                 let internalKey = `__${column}`;
                 this.columnMap[column] = internalKey;
-                Object.defineProperty(this.proto, column, {
+                Object.defineProperty(this.object, column, {
                     get() {
                         return this[internalKey];
                     },
                     set(v) {
                         if (index.static) throw `Error: cannot assign immutable ${column}`;
+                        if (column === 'type') {
+                            if (!prototypes[v]) throw `Error: type must be one of ${Object.keys(prototypes)}`;
+                            Object.setPrototypeOf(this, prototypes[v]);
+                        }
                         table.#indexDel(column, this);
                         this[internalKey] = v;
                         table.#indexAdd(column, this);
@@ -60,21 +76,21 @@ export class Table {
             } else {
                 // Can't use a getter/setter here, because we want the
                 // child object to be able to set this
-                this.proto[column] = null;
+                this.object[column] = undefined;
             }
         }
     }
 
     create(type, init) {
+        if (!this.prototypes[type]) throw `Error: type must be one of ${Object.keys(this.prototypes)}`;
         let id = ++this._nextId;
-        let object= {...this.prototypes[type]}
-        object[this.columnMap.id] = id;
-        object[this.columnMap.type] = type;
+        let row= Object.create(this.prototypes[type]);
+        row[this.columnMap.id] = id;
+        row[this.columnMap.type] = type;
         for (let column of Object.keys(init)) {
-            if (!this.columns.includes(column)) throw `Create[${this.name}]: init ${JSON.stringify(init)} has an extranaeous key: ${column}`;
-            object[this.columnMap[column]] = init[column];
+            if (!this.columns.has(column)) throw `Create[${this.name}]: init ${JSON.stringify(init)} has an extraneous key: ${column}`;
+            row[this.columnMap[column]] = init[column];
         }
-        let row = Object.assign(Object.create(this.proto), object);
         for (let column of Object.keys(this.indexes)) {
             this.#indexAdd(column, row);
         }
@@ -104,6 +120,7 @@ export class Table {
 
     #indexAdd(column, row) {
         let value = row[this.columnMap[column]];
+        if (value === undefined) return;
         if (value !== null && typeof value === 'object') Object.freeze(value); // Must be immutable to index
         let key = this.#indexKey(value);
         let matches = this.indexes[column].get(key);
@@ -116,7 +133,9 @@ export class Table {
     }
 
     #indexDel(column, row) {
-        let key = this.#indexKey(row[this.columnMap[column]]);
+        let value = row[this.columnMap[column]];
+        if (value === undefined) return;
+        let key = this.#indexKey(value);
         let matches = this.indexes[column].get(key);
         let i = matches?.indexOf(row) ?? -1;
         if (i < 0) throw `Removing non-existent key from index ${column} with row ${JSON.stringify(row)}`;
@@ -136,7 +155,8 @@ export class Table {
     findAll(query) {
         let rows = this.rows;
         for (let [column, pattern] of Object.entries(query)) {
-            if (!this.columns.includes(column)) throw `Query of column ${column} doesn't exist on table ${this.name}`;
+            if (!this.columns.has(column) && !this.prototypeColumns.has(column)) throw `Query of column ${column} doesn't exist on table ${this.name}`;
+            if (pattern === Table.ANY) continue; // unimplemented
             let index = this.indexes[column];
             if (!index) continue;
             let key = this.#indexKey(pattern);
@@ -146,7 +166,9 @@ export class Table {
         return rows.filter((row) => {
             for (let [column, pattern] of Object.entries(query)) {
                 let testAgainst = row[column];
-                if (Array.isArray(pattern)) {
+                if (pattern === Table.ANY) {
+                    if (testAgainst == undefined) return false;
+                } else if (Array.isArray(pattern)) {
                     if (!Array.isArray(testAgainst)) return false;
                     if (pattern.length !== testAgainst.length) return false;
                     for (let i = 0; i < pattern.length; i++) {
@@ -179,5 +201,3 @@ export class Table {
         return results[0];
     }
 }
-
-// TODO: write tests
