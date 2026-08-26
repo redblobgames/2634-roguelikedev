@@ -34,6 +34,7 @@ canvas.focus();
  *
  * @typedef {
        {type: 'move', dx: number, dy: number}
+     | {type: 'wait'}
      | {type: 'none'}
    } Action
  *
@@ -48,22 +49,36 @@ function keyToAction(event) {
     if (event.key === 'ArrowLeft')  { action = {type: 'move', dx: -1, dy: 0}; }
     if (event.key === 'ArrowDown')  { action = {type: 'move', dx: 0, dy: +1}; }
     if (event.key === 'ArrowUp')    { action = {type: 'move', dx: 0, dy: -1}; }
-
+    if (event.key === '.')          { action = {type: 'wait'}; }
     return action;
 }
 
 
 /**
+ * These are factory functions to construct commonly used groups of
+ * components. These values are shared among all instances.
+ */
+let components = {
+    fighter(maxHp, defense, attack) {
+        return {fighter: {maxHp, defense, attack}};
+    },
+    enemy(hp, defense, attack) {
+        return {blocksMovement: true, ai: ['hostile'], ...this.fighter(hp, defense, attack)};
+    },
+};
+
+/**
  * Stores information about the entire game world
  */
 let world = {
-    entities: new Table('Entities', ['location'],
+    entities: new Table('Entities', ['location', 'hp'],
         {
             // NOTE: fg must be hsl(h s l) or rgb(r g b) with no alpha
             // because we manipulate the color string elsewhere
-            player: {shape: "@", fg: "hsl(60 100% 50%)", blocksMovement: false},
-            troll:  {shape: "T", fg: "hsl(120 60% 50%)", blocksMovement: true},
-            orc:    {shape: "o", fg: "hsl(100 30% 50%)", blocksMovement: true},
+            player: {shape: "@", fg: "hsl(60 100% 50%)", blocksMovement: false, ...components.fighter(30, 2, 5)},
+            corpse: {shape: "%", fg: "hsl(  0 20% 50%)", blocksMovement: false},
+            troll:  {shape: "T", fg: "hsl(120 60% 50%)", ...components.enemy(10, 0, 3)},
+            orc:    {shape: "o", fg: "hsl(100 30% 50%)", ...components.enemy(16, 1, 4)},
         }
     ),
     tiles: new Table('Tiles', ['position', 'light', 'maxLight'],
@@ -91,8 +106,12 @@ function generateDungeon() {
     // Create the player, or move existing player to this map
     let [playerX, playerY] = rooms[0].getCenter();
     let playerLocation = {type: 'map', x: playerX, y: playerY};
-    if (!world.player) world.player = world.entities.create('player', {location: playerLocation})
-    else               world.player.location = playerLocation;
+    if (!world.player) {
+        world.player = world.entities.create('player', {location: playerLocation});
+        world.player.hp = world.player.fighter.maxHp;
+    } else {
+        world.player.location = playerLocation;
+    }
 
     // Create monsters in each room
     const maxMonstersPerRoom = 3;
@@ -104,10 +123,36 @@ function generateDungeon() {
             let location = {type: 'map', x, y};
             if (!world.entities.findAny({location})) {
                 let type = randint(0, 3) === 0? 'troll' : 'orc';
-                world.entities.create(type, {location});
+                let enemy = world.entities.create(type, {location, hp: 0});
+                enemy.hp = enemy.fighter.maxHp;
             }
         }
     }
+}
+
+/**
+ * Combat
+ */
+function handleCombat(attacker, defender) {
+    let damage = attacker.fighter.attack - defender.fighter.defense;
+    let message = `${attacker.type} attacks ${defender.type}`;
+    if (damage > 0) {
+        message += ` for ${damage} health.`;
+        defender.hp = Math.max(0, defender.hp - damage);
+        // TODO: want to check hp in other places because there could be other reasons it died
+    } else {
+        message += ` but does no damage.`;
+    }
+    console.log(message);
+    if (defender.hp === 0) handleDeath(defender);
+}
+
+function handleDeath(actor) {
+    let message = actor === world.player? `You died!` : `${actor.type} is dead!`;
+    console.log(message);
+    actor.type = 'corpse';
+    actor.ai = undefined;
+    // TODO: we need a priority system to draw corpses underneath enemies
 }
 
 /**
@@ -117,6 +162,8 @@ function generateDungeon() {
  */
 function handlePlayerAction(action) {
     switch (action.type) {
+        case 'wait':
+            return true;
         case 'move':
             let newX = world.player.location.x + action.dx;
             let newY = world.player.location.y + action.dy;
@@ -124,9 +171,12 @@ function handlePlayerAction(action) {
             if (!tile) return false;
 
             let blockingEntity = world.entities.findAny({blocksMovement: true, location: {type: 'map', x: newX, y: newY}});
-            if (blockingEntity) {
-                console.log(`You kick the ${blockingEntity.type}, much to its annoyance!`);
+            if (blockingEntity?.fighter) {
+                handleCombat(world.player, blockingEntity);
                 return true;
+            } else if (blockingEntity) {
+                console.log(`You cannot walk through ${blockingEntity.type}.`);
+                return false;
             } else {
                 world.player.location = {type: 'map', x: newX, y: newY};
                 return true;
@@ -134,6 +184,68 @@ function handlePlayerAction(action) {
     }
 
     throw `Unknown action: ${JSON.stringify(action)}`;
+}
+
+function walkableTilesAdjacentTo(tile) {
+    let results = [];
+    for (let [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        let position = {x: tile.position.x + dx, y: tile.position.y + dy};
+        let next = world.tiles.findAny({position, walkable: true});
+        if (next) results.push(next);
+    }
+    // Aesthetic trick: https://www.redblobgames.com/pathfinding/a-star/implementation.html#ties-checkerboard-neighbors
+    if (((tile.x + tile.y) & 1) === 0) results.reverse();
+
+    return results;
+}
+
+/**
+ * @param {{x: number, y: number}} p
+ * @param {{x: number, y: number}} q
+ * @returns {number} - manhattan distance
+ */
+function distanceBetween(p, q) {
+    return Math.abs(p.x - q.x) + Math.abs(p.y - q.y);
+}
+
+function handleAi(enemy) {
+    const MIN_VISIBILITY = 0.2;
+    if (enemy.ai === undefined) return;
+    switch (enemy.ai[0]) {
+        case 'hostile':
+            // Make sure we're on the map
+            if (enemy.location.type !== 'map') return;
+
+            // Make sure the player is visible (assuming bidirectional visibility)
+            let enemyAt = world.tiles.findAny({position: {x: enemy.location.x, y: enemy.location.y}});
+            if (enemyAt.light < MIN_VISIBILITY) return;
+
+            // Find the adjacent tile closest to the player. This is
+            // not as fancy as the logic in the Python tutorial, which
+            // runs pathfinding.
+            let closestDistance = Infinity;
+            let closestNeighbor = null;
+            for (let next of walkableTilesAdjacentTo(enemyAt)) {
+                // Make sure nothing blocks movement to this tile
+                if (world.entities.findAny({blocksMovement: true, location: {type: 'map', x: next.position.x, y: next.position.y}})) continue;
+
+                let distance = distanceBetween(next.position, world.player.location);
+                if (distance < closestDistance) {
+                    closestDistance = distance;
+                    closestNeighbor = next;
+                }
+            }
+            if (closestNeighbor === null) return;
+
+            if (closestDistance === 0 && world.player.fighter) {
+                // Attack the player
+                handleCombat(enemy, world.player);
+            } else {
+                // Move to a tile closer to the player
+                enemy.location = {type: 'map', x: closestNeighbor.position.x, y: closestNeighbor.position.y};
+            }
+            return;
+    }
 }
 
 /**
@@ -149,12 +261,15 @@ function handleKeyDown(event) {
 
     if (handlePlayerAction(action)) {
         // let enemies move
-        console.log("TODO: Enemies should take their turn");
+        for (let entity of world.entities.findAll({ai: Table.ANY})) {
+            handleAi(entity);
+        }
         drawAll();
     }
 }
 
 function formatValue(value) {
+    if (value === undefined) return "";
     if (value === null) return "(null)";
     if (Array.isArray(value)) return JSON.stringify(value);
     if (typeof value === 'object') {
