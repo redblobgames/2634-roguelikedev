@@ -75,10 +75,10 @@ let world = {
         {
             // NOTE: fg must be hsl(h s l) or rgb(r g b) with no alpha
             // because we manipulate the color string elsewhere
-            player: {shape: "@", fg: "hsl(60 100% 50%)", blocksMovement: false, ...components.fighter(30, 2, 5)},
-            corpse: {shape: "%", fg: "hsl(  0 20% 50%)", blocksMovement: false},
-            troll:  {shape: "T", fg: "hsl(120 60% 50%)", ...components.enemy(10, 0, 3)},
-            orc:    {shape: "o", fg: "hsl(100 30% 50%)", ...components.enemy(16, 1, 4)},
+            player: {shape: "@", fg: "hsl(60 100% 50%)", renderOrder: 1, blocksMovement: false, ...components.fighter(30, 2, 5)},
+            corpse: {shape: "%", fg: "hsl(  0 20% 50%)", renderOrder: 9, blocksMovement: false},
+            troll:  {shape: "T", fg: "hsl(120 60% 50%)", renderOrder: 2, ...components.enemy(10, 0, 3)},
+            orc:    {shape: "o", fg: "hsl(100 30% 50%)", renderOrder: 2, ...components.enemy(16, 1, 4)},
         }
     ),
     tiles: new Table('Tiles', ['position', 'light', 'maxLight'],
@@ -152,7 +152,6 @@ function handleDeath(actor) {
     console.log(message);
     actor.type = 'corpse';
     actor.ai = undefined;
-    // TODO: we need a priority system to draw corpses underneath enemies
 }
 
 /**
@@ -334,7 +333,8 @@ function drawWorld() {
             bgColorAtTile(tile)
         );
     }
-    for (let entity of world.entities.rows.toReversed()) {
+    let sortedEntities = world.entities.rows.toSorted((a, b) => b.renderOrder - a.renderOrder);
+    for (let entity of sortedEntities) {
         if (entity.location.type !== 'map') continue;
         let position = {x: entity.location.x, y: entity.location.y};
         let tile = world.tiles.findOne({position});
