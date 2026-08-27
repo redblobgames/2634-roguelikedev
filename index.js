@@ -251,6 +251,13 @@ function handleAi(enemy) {
  * @param {KeyboardEvent} event
  */
 function handleKeyDown(event) {
+    if (world.player.hp === 0) {
+        // The player is dead and can't move around anymore. This is a
+        // placeholder until I work on the UI and can display a "game
+        // over" message, as well as "new game"
+        return;
+    }
+
     let action = keyToAction(event);
 
     // Only preventDefault if we handled the event; otherwise we want
