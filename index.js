@@ -42,15 +42,48 @@ canvas.focus();
  * @returns {Action}
  */
 function keyToAction(event) {
-    /** @type{Action} */
-    let action = {type: 'none'};
+    // I want to be able to use the numpad whether NumLock is off or
+    // on. That requires using event.code.
+    const REMAP_NUMPAD = {
+        Numpad7: 'Home',
+        Numpad8: 'ArrowUp',
+        Numpad9: 'PageUp',
+        Numpad4: 'ArrowLeft',
+        Numpad5: '.',
+        Numpad6: 'ArrowRight',
+        Numpad1: 'End',
+        Numpad2: 'ArrowDown',
+        Numpad3: 'PageDown',
+    }
+    // But for the other keys I want to use event.key, because it
+    // honors the current layout.
+    const REMAP_VI_KEYS = {
+        h: 'ArrowLeft',
+        j: 'ArrowDown',
+        k: 'ArrowUp',
+        l: 'ArrowRight',
+        y: 'Home',
+        u: 'PageUp',
+        b: 'End',
+        n: 'PageDown',
+    };
+    // The main keybindings are using event.key
+    /** @type{Record<string, Action>} */
+    const KEYMAP = {
+        Home:       {type: 'move', dx: -1, dy: -1},
+        ArrowUp:    {type: 'move', dx:  0, dy: -1},
+        PageUp:     {type: 'move', dx: +1, dy: -1},
+        ArrowLeft:  {type: 'move', dx: -1, dy:  0},
+        ArrowRight: {type: 'move', dx: +1, dy:  0},
+        End:        {type: 'move', dx: -1, dy: +1},
+        ArrowDown:  {type: 'move', dx:  0, dy: +1},
+        PageDown:   {type: 'move', dx: +1, dy: +1},
+        ['.']:      {type: 'wait'},
+    };
 
-    if (event.key === 'ArrowRight') { action = {type: 'move', dx: +1, dy: 0}; }
-    if (event.key === 'ArrowLeft')  { action = {type: 'move', dx: -1, dy: 0}; }
-    if (event.key === 'ArrowDown')  { action = {type: 'move', dx: 0, dy: +1}; }
-    if (event.key === 'ArrowUp')    { action = {type: 'move', dx: 0, dy: -1}; }
-    if (event.key === '.')          { action = {type: 'wait'}; }
-    return action;
+    let key = REMAP_NUMPAD[event.code] ?? event.key;
+    key = REMAP_VI_KEYS[key] ?? key;
+    return KEYMAP[key] ?? {type: 'none'};
 }
 
 
@@ -187,24 +220,21 @@ function handlePlayerAction(action) {
 
 function walkableTilesAdjacentTo(tile) {
     let results = [];
-    for (let [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    for (let [dx, dy] of [[+1, 0], [-1, 0], [0, +1], [0, -1], [-1, -1], [-1, +1], [+1, -1], [+1, +1]]) {
         let position = {x: tile.position.x + dx, y: tile.position.y + dy};
         let next = world.tiles.findAny({position, walkable: true});
         if (next) results.push(next);
     }
-    // Aesthetic trick: https://www.redblobgames.com/pathfinding/a-star/implementation.html#ties-checkerboard-neighbors
-    if (((tile.x + tile.y) & 1) === 0) results.reverse();
-
     return results;
 }
 
 /**
  * @param {{x: number, y: number}} p
  * @param {{x: number, y: number}} q
- * @returns {number} - manhattan distance
+ * @returns {number} - chebyshev distance
  */
 function distanceBetween(p, q) {
-    return Math.abs(p.x - q.x) + Math.abs(p.y - q.y);
+    return Math.max(Math.abs(p.x - q.x), Math.abs(p.y - q.y));
 }
 
 function handleAi(enemy) {
