@@ -5,29 +5,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Display, RNG, Map as RotMap, FOV } from "./third-party/rotjs/index.js";
+import { RNG, Map as RotMap, FOV } from "./third-party/rotjs/index.js";
 import { Table } from "./table.js";
+import { screenSize, drawWorld, drawTable, setupInputHandlers } from "./interface.js";
 
 RNG.setSeed(1234);
 const randint = RNG.getUniformInt.bind(RNG);
-
-const screenSize = {x: 40, y: 25};
-const display = new Display({
-    width: screenSize.x,
-    height: screenSize.y,
-    fontFamily: "Courier Prime",
-    fontSize: 18,
-});
-const canvas = /** @type{HTMLCanvasElement} */(display.getContainer());
-document.querySelector("#game").append(canvas);
-
-canvas.setAttribute('tabindex', "1");
-canvas.addEventListener('keydown', handleKeyDown);
-
-const focusReminder = document.getElementById('focus-reminder');
-canvas.addEventListener('blur', () =>  { focusReminder.style.visibility = 'visible'; });
-canvas.addEventListener('focus', () => { focusReminder.style.visibility = 'hidden'; });
-canvas.focus();
 
 /**
  * Determine which action occurs when a key is pressed.
@@ -281,39 +264,32 @@ function handleAi(enemy) {
  * @param {KeyboardEvent} event
  */
 function handleKeyDown(event) {
-    if (world.player.hp === 0) {
+    function playerDeadState() {
         // The player is dead and can't move around anymore. This is a
         // placeholder until I work on the UI and can display a "game
         // over" message, as well as "new game"
         return;
     }
 
-    let action = keyToAction(event);
+    function playerAliveState() {
+        let action = keyToAction(event);
 
-    // Only preventDefault if we handled the event; otherwise we want
-    // the default browser behavior
-    if (action.type === 'none') return;
-    event.preventDefault();
+        // Only preventDefault if we handled the event; otherwise we want
+        // the default browser behavior
+        if (action.type === 'none') return;
+        event.preventDefault();
 
-    if (handlePlayerAction(action)) {
-        // let enemies move
-        for (let entity of world.entities.findAll({ai: Table.ANY})) {
-            handleAi(entity);
+        if (handlePlayerAction(action)) {
+            // let enemies move
+            for (let entity of world.entities.findAll({ai: Table.ANY})) {
+                handleAi(entity);
+            }
+            drawAll();
         }
-        drawAll();
     }
-}
 
-function formatValue(value) {
-    if (value === undefined) return "";
-    if (value === null) return "(null)";
-    if (Array.isArray(value)) return JSON.stringify(value);
-    if (typeof value === 'object') {
-        return Object.entries(value)
-            .map(([key, v]) => `${key}: ${JSON.stringify(v)}`)
-            .join(", ");
-    }
-    return value.toString();
+    if (world.player.hp === 0) return playerDeadState()
+    else return playerAliveState();
 }
 
 const fov = new FOV.PreciseShadowcasting((x, y) => world.tiles.findAny({position: {x, y}})?.transparent);
@@ -330,77 +306,10 @@ function drawAll() {
             tile.maxLight = Math.max(tile.maxLight, light);
         }
     });
-    drawWorld();
+    drawWorld(world);
     drawTable("#world-entities", world.entities);
 }
 
-const BG_COLOR = {
-    shroud: [0, 0, 0],
-    explored: {
-        floor: [50, 50, 150],
-        wall: [0, 0, 100],
-    },
-    visible: {
-        floor: [200, 180, 50],
-        wall: [130, 110, 50],
-    },
-};
-const lerp = (a, b, t) => a * (1-t) + b * t;
-const lerp3 = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
-function bgColorAtTile(tile) {
-    let rgb = lerp3(
-        lerp3(
-            BG_COLOR.shroud,
-            BG_COLOR.explored[tile.type],
-            tile.maxLight
-        ),
-        BG_COLOR.visible[tile.type],
-        tile.light
-    );
-    return `rgb(${rgb})`;
-}
-
-function drawWorld() {
-    display.clear();
-    for (let tile of world.tiles.rows) {
-        // In the 2020 version of the Python tutorial, the tiles are
-        // blank and we only need to draw the background color.
-        display.draw(tile.position.x, tile.position.y, ' ',
-            "purple" /* should never see this */,
-            bgColorAtTile(tile)
-        );
-    }
-    let sortedEntities = world.entities.rows.toSorted((a, b) => b.renderOrder - a.renderOrder);
-    for (let entity of sortedEntities) {
-        if (entity.location.type !== 'map') continue;
-        let position = {x: entity.location.x, y: entity.location.y};
-        let tile = world.tiles.findOne({position});
-
-        display.draw(
-            position.x, position.y,
-            entity.shape,
-            entity.fg.replace(")", ` / ${tile.light})`),
-            bgColorAtTile(tile)
-        );
-    }
-}
-
-function drawTable(selector, table) {
-    let html = `<table rules=all border=all><thead><tr>`;
-    for (let column of table.columns) {
-        html += `<th>${column}</th>`;
-    }
-    html += `</tr></thead><tbody>`;
-    for (let entity of table.rows) {
-        html += `<tr>`;
-        for (let column of table.columns) {
-            html += `<td>${formatValue(entity[column])}</td>`;
-        }
-        html += `</tr>`;
-    }
-    html += `</tbody></table>`;
-    document.querySelector(selector).innerHTML = html;
-}
-
+setupInputHandlers(handleKeyDown);
 generateDungeon();
 drawAll();
