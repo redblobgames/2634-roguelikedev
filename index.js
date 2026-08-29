@@ -7,7 +7,7 @@
 
 import { RNG, Map as RotMap, FOV } from "./third-party/rotjs/index.js";
 import { Table } from "./table.js";
-import { screenSize, drawWorld, drawTable, setupInputHandlers } from "./interface.js";
+import { print, screenSize, drawWorld, drawTable, drawMessages, setupInputHandlers } from "./interface.js";
 
 RNG.setSeed(1234);
 const randint = RNG.getUniformInt.bind(RNG);
@@ -159,13 +159,13 @@ function handleCombat(attacker, defender) {
     } else {
         message += ` but does no damage.`;
     }
-    console.log(message);
+    print(message);
     if (defender.hp === 0) handleDeath(defender);
 }
 
 function handleDeath(actor) {
     let message = actor === world.player? `You died!` : `${actor.type} is dead!`;
-    console.log(message);
+    print(message);
     actor.type = 'corpse';
     actor.ai = undefined;
 }
@@ -308,6 +308,7 @@ function drawAll() {
     });
     drawWorld(world);
     drawTable("#world-entities", world.entities);
+    drawMessages();
 }
 
 setupInputHandlers(handleKeyDown);
