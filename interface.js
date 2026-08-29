@@ -27,10 +27,13 @@ export function setupInputHandlers(handleKeyDown) {
     canvas.setAttribute('tabindex', "1");
     canvas.addEventListener('keydown', handleKeyDown);
 
+    const onBlur= () => focusReminder.classList.toggle('visible', true);
+    const onFocus = () => focusReminder.classList.toggle('visible', false);
     const focusReminder = document.getElementById('focus-reminder');
-    canvas.addEventListener('blur', () =>  { focusReminder.style.visibility = 'visible'; });
-    canvas.addEventListener('focus', () => { focusReminder.style.visibility = 'hidden'; });
+    canvas.addEventListener('blur', onBlur);
+    canvas.addEventListener('focus', onFocus);
     canvas.focus();
+    if (document.hasFocus() && document.activeElement === canvas) onFocus(); else onBlur();
 }
 
 
@@ -63,6 +66,10 @@ function bgColorAtTile(tile) {
 
 
 export function drawWorld(world) {
+    let player = world.player;
+    /** @type{HTMLElement} */(document.querySelector("#health-bar-fg")).style.width = player.fighter ? `${Math.ceil(100*world.player.hp/world.player.fighter.maxHp)}%` : "0";
+    document.querySelector("#health-bar-text").textContent = world.player.fighter ?` HP: ${world.player.hp} / ${world.player.fighter.maxHp}` : ` Player is dead! `;
+
     display.clear();
     for (let tile of world.tiles.rows) {
         // In the 2020 version of the Python tutorial, the tiles are

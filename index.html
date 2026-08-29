@@ -4,10 +4,60 @@
     <title>2026 RoguelikeDev summer project</title>
     <script type="module" src="index.js"></script>
     <style>
-        #game canvas { display: block; margin: auto; }
-        #focus-reminder { text-align: center; }
+        body { font-family: sans-serif; }
+
+        #game-container {
+            display: grid;
+            grid-template-columns: min-content;
+            grid-template-areas: "game" "status-bar";
+        }
+
+        #game {
+            grid-area: game;
+            z-index: 1;
+            canvas {
+                display: block;
+                opacity: 0.5;
+                &:focus {
+                    outline: none;
+                    opacity: 1.0;
+                }
+            }
+        }
+
+        #focus-reminder {
+            grid-area: status-bar;
+            text-align: center; /* horizontal */
+            align-self: center; /* vertical */
+            background: hsl(60 100% 75%);
+            padding-block: 0.25em;
+            color: black;
+            opacity: 0.0;
+            transition: all 0.2s;
+            &.visible {
+                opacity: 1.0;
+            }
+        }
+
+        #health-bar-bg {
+            grid-area: status-bar;
+            background: hsl(0 50% 20%);
+        }
+        #health-bar-fg {
+            grid-area: status-bar;
+            background: hsl(200 50% 40%);
+        }
+        #health-bar-text {
+            grid-area: status-bar;
+            font-size: 0.8em;
+            color: white;
+            text-align: center; /* horizontal */
+            align-self: center; /* vertical */
+        }
+
         #world-entities {
-            margin-left: 10em;
+            max-width: 100%;
+            overflow-x: auto;
             font-family: monospace;
             th {
                 background: #eee;
@@ -22,10 +72,15 @@
     </style>
   </head>
   <body>
-    <figure>
-      <div id="game"></div>
-      <div id="focus-reminder">click game to focus</div>
+    <div id="layout">
+      <div id="game-container">
+        <div id="game"></div>
+        <div id="health-bar-bg"></div>
+        <div id="health-bar-fg"></div>
+        <div id="health-bar-text"></div>
+        <div id="focus-reminder">Click game for keyboard focus</div>
+      </div>
       <div id="world-entities"></div>
-    </figure>
+    </div>
   </body>
 </html>
