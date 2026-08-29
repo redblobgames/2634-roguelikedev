@@ -11,6 +11,15 @@
  */
 
 import { Display } from "./third-party/rotjs/index.js";
+import * as snabbdom from "./third-party/snabbdom/index.js";
+
+const snabbdomPatch = snabbdom.init([
+    snabbdom.classModule,
+    snabbdom.styleModule,
+    snabbdom.propsModule,
+    snabbdom.attributesModule,
+    snabbdom.eventListenersModule,
+]);
 
 export const screenSize = {x: 40, y: 25};
 const display = new Display({
@@ -132,21 +141,39 @@ function formatValue(value) {
     return value.toString();
 }
 
-export function drawTable(selector, table) {
-    let html = `<table rules=all border=all><thead><tr>`;
+/** @type{Element | snabbdom.VNode} */
+let drawTableVnode = document.querySelector("#world-entities");
+export function drawTable(table) {
+    const {h} = snabbdom;
+    const types = Object.keys(table.prototypes);
+
+    let vnodeHeader = [];
     for (let column of table.columns) {
-        html += `<th>${column}</th>`;
+        vnodeHeader.push(h('th', column));
     }
-    html += `</tr></thead><tbody>`;
+    let vnodeRows = [];
     for (let entity of table.rows) {
-        html += `<tr>`;
+        let vnodeCols = [];
         for (let column of table.columns) {
-            html += `<td>${formatValue(entity[column])}</td>`;
+            let attrs = {};
+            if (!Object.hasOwn(entity, column) && !Object.hasOwn(entity, "__"+column)) {
+                let hue = 360 * types.indexOf(entity.type) / types.length;
+                attrs = {style: {color: `oklch(65% 0.05 ${hue}deg)`}};
+            }
+            vnodeCols.push(h('td', attrs, [formatValue(entity[column])]));
         }
-        html += `</tr>`;
+        vnodeRows.push(h('tr', vnodeCols));
     }
-    html += `</tbody></table>`;
-    document.querySelector(selector).innerHTML = html;
+    let vnodeTable = h("div#world-entities",
+        h('table',
+            {attrs: {rules: "all", border: "all"}},
+            [
+                h('thead', h('tr', vnodeHeader)),
+                h('tbody', vnodeRows),
+            ]
+        )
+    );
+    drawTableVnode = snabbdomPatch(drawTableVnode, vnodeTable);
 }
 
 
