@@ -20,7 +20,11 @@ const display = new Display({
     fontSize: 18,
 });
 
-export function setupInputHandlers(handleKeyDown) {
+/** @type{any} */
+let world = {}; // circular I know but … haven't found a better way
+
+export function setupInputHandlers(worldGlobal, handleKeyDown) {
+    world = worldGlobal;
     const canvas = /** @type{HTMLCanvasElement} */(display.getContainer());
     document.querySelector("#game").append(canvas);
 
@@ -126,7 +130,7 @@ export function drawTable(selector, table) {
 
 
 const MAX_MESSAGE_LINES = 100;
-let messages = []; // [text, className]
+let messages = /** @type{Array<string>} */([]); // [html, …]
 export function drawMessages() {
     let messageBox = document.querySelector("#messages");
     // If there are more messages than there are <div>s, add some
@@ -137,18 +141,42 @@ export function drawMessages() {
     while (messages.length < messageBox.children.length) {
         messageBox.removeChild(messageBox.lastChild);
     }
-    // Update the <div>s to have the right message text and color
+    // Update the content
     for (let line = 0; line < messages.length; line++) {
         let div = messageBox.children[line];
-        div.textContent = messages[line][0];
-        div.setAttribute('class', messages[line][1]);
+        div.innerHTML = messages[line];
     }
     // Scroll to the bottom
     messageBox.scrollTop = messageBox.scrollHeight;
 }
 
-export function print(message, className) {
-    messages.push([message, className]);
+function escapeHTML(text) { // wish this was built in
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    };
+    return text.replace(/[&<>"']/g, m => map[m]);
+}
+
+export function print(strings, ...values) {
+    let html = ``;
+    for (let i = 0; i < strings.length; i++) {
+        html += escapeHTML(strings[i]);
+        if (i < values.length) {
+            let v = values[i];
+            if (v === world.player) {
+                html += `<span class="player" data-entityid="${v.id}">player</span>`;
+            } else if (world.entities.object.isPrototypeOf(v)) {
+                html += `<span class="entity" data-entityid="${v.id}">${escapeHTML(v.type)}</span>`;
+            } else {
+                html += `<span class="other">${escapeHTML(v.toString())}</span>`;
+            }
+        }
+    }
+    messages.push(html);
     messages.splice(0, messages.length - MAX_MESSAGE_LINES);
     drawMessages();
 }
