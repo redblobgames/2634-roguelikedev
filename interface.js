@@ -31,6 +31,9 @@ export function setupInputHandlers(worldGlobal, handleKeyDown) {
     canvas.setAttribute('tabindex', "1");
     canvas.addEventListener('keydown', handleKeyDown);
 
+    canvas.addEventListener('mousemove', handleMousemove);
+    canvas.addEventListener('mouseout', handleMouseout);
+
     const onBlur= () => focusReminder.classList.toggle('visible', true);
     const onFocus = () => focusReminder.classList.toggle('visible', false);
     const focusReminder = document.getElementById('focus-reminder');
@@ -39,6 +42,24 @@ export function setupInputHandlers(worldGlobal, handleKeyDown) {
     canvas.focus();
     if (document.hasFocus() && document.activeElement === canvas) onFocus(); else onBlur();
 }
+
+function handleMousemove(event) {
+    let [x, y] = display.eventToPosition(event); // returns -1, -1 for out of bounds
+    let tile = world.tiles.findAny({position: {x, y}});
+    let text = "";
+    if (tile && tile.light >= 0.2) {
+        let entities = world.entities
+            .findAll({location: {type: 'map', x, y}})
+            .toSorted((a, b) => b.renderOrder - a.renderOrder);
+        text = entities.map(e => e.type + " " + e.id).join("\n");
+    }
+    showTemporaryMessage(text);
+}
+
+function handleMouseout(event) {
+    showTemporaryMessage("");
+}
+
 
 
 
@@ -179,4 +200,10 @@ export function print(strings, ...values) {
     messages.push(html);
     messages.splice(0, messages.length - MAX_MESSAGE_LINES);
     drawMessages();
+}
+
+export function showTemporaryMessage(text) {
+    let area = document.querySelector("#message-overlay");
+    area.textContent = text;
+    area.classList.toggle('visible', !!text);
 }
