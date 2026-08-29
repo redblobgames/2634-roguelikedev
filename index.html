@@ -79,6 +79,28 @@
             }
         }
 
+        #message-overlay {
+            grid-area: message-area;
+            height: 0%;
+            width: 100%;
+            font-family: var(--monospace), monospace;
+            font-size: 0.8em;
+            line-height: 1.0;
+            padding: 0.5em 1em;
+            opacity: 0.0;
+            pointer-events: none; /* so scroll events go down to the #messages div */
+            white-space: pre-wrap;
+            background: black;
+            color: white;
+            transition: all 0.3s;
+            &.visible {
+                height: 100%;
+                opacity: 1.0;
+                background: hsl(300 10% 30%);
+                transition: all 0s;
+            }
+        }
+
         #world-entities {
             max-width: 100%;
             overflow-x: auto;
@@ -103,9 +125,9 @@
         <div id="health-bar-fg"></div>
         <div id="health-bar-text"></div>
         <div id="focus-reminder">Click game for keyboard focus</div>
+        <div id="messages"></div>
+        <div id="message-overlay"></div>
       </div>
-      </div>
-      <div id="messages"></div>
       <div id="world-entities"></div>
     </div>
   </body>
