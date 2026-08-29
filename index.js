@@ -151,21 +151,18 @@ function generateDungeon() {
  */
 function handleCombat(attacker, defender) {
     let damage = attacker.fighter.attack - defender.fighter.defense;
-    let message = `${attacker.type} attacks ${defender.type}`;
     if (damage > 0) {
-        message += ` for ${damage} health.`;
         defender.hp = Math.max(0, defender.hp - damage);
         // TODO: want to check hp in other places because there could be other reasons it died
+        print `${attacker} attacks ${defender} for ${damage} hp.`;
     } else {
-        message += ` but does no damage.`;
+        print `${attacker} attacks ${defender} but does no damage.`;
     }
-    print(message);
     if (defender.hp === 0) handleDeath(defender);
 }
 
 function handleDeath(actor) {
-    let message = actor === world.player? `You died!` : `${actor.type} is dead!`;
-    print(message);
+    print `${actor} is dead!`;
     actor.type = 'corpse';
     actor.ai = undefined;
 }
@@ -311,6 +308,6 @@ function drawAll() {
     drawMessages();
 }
 
-setupInputHandlers(handleKeyDown);
+setupInputHandlers(world, handleKeyDown);
 generateDungeon();
 drawAll();

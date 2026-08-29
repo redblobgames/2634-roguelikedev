@@ -63,13 +63,15 @@
             font-family: var(--monospace), monospace;
             font-size: 0.8em;
             line-height: 1.0;
-        }
-        #messages {
             padding: 0.5em 1em;
             background: hsl(60 10% 10%);
             color: white;
             overflow-x: hidden;
             overflow-y: scroll;
+            scrollbar-color: #999 black;
+            .player { color: hsl(120 75% 75%); }
+            .entity { color: hsl(30 75% 75%); }
+            .other { color: hsl(180 75% 75%); }
             > div {
                 margin-left: 1em;
                 margin-bottom: 0.25em;
