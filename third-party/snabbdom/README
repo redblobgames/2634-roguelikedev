@@ -1,0 +1,5 @@
+# I built the index.js bundle like this:
+git clone https://github.com/snabbdom/snabbdom
+cd snabbdom
+mkdir -p build
+esbuild --minify --bundle src/index.ts --outfile=build/index.js --format=esm --banner:js="/* $(cat LICENSE) */"

@@ -304,7 +304,7 @@ function drawAll() {
         }
     });
     drawWorld(world);
-    drawTable("#world-entities", world.entities);
+    drawTable(world.entities);
     drawMessages();
 }
 
