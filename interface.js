@@ -253,53 +253,52 @@ export function drawTable(table) {
 
 
 const MAX_MESSAGE_LINES = 100;
-let messages = /** @type{Array<string>} */([]); // [html, …]
-export function drawMessages() {
-    let messageBox = document.querySelector("#messages");
-    // If there are more messages than there are <div>s, add some
-    while (messageBox.children.length < messages.length) {
-        messageBox.appendChild(document.createElement('div'));
-    }
-    // Remove any extra <div>s
-    while (messages.length < messageBox.children.length) {
-        messageBox.removeChild(messageBox.lastChild);
-    }
-    // Update the content
-    for (let line = 0; line < messages.length; line++) {
-        let div = messageBox.children[line];
-        div.innerHTML = messages[line];
-    }
-    // Scroll to the bottom
-    messageBox.scrollTop = messageBox.scrollHeight;
-}
+/** @type{Array<Array<[snabbdom.VNodeData | null, snabbdom.VNodeChildren]>>} */
+let messages = [];
+/** @type{Element | snabbdom.VNode} */
+let messagesVnode = document.querySelector("#messages");
 
-function escapeHTML(text) { // wish this was built in
-    const map = {
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#39;'
-    };
-    return text.replace(/[&<>"']/g, m => map[m]);
+export function drawMessages() {
+    const {h} = snabbdom;
+    let vnodeRows = messages.map(
+        (message) => h('div',
+            message.map((m) =>
+                h('span', m[0], m[1]))
+        )
+    );
+    messagesVnode = snabbdomPatch(messagesVnode, h("div#messages", vnodeRows));
+
+    let element = /** @type{HTMLElement} */(messagesVnode.elm);
+    element.scrollTop = element.scrollHeight; // Scroll to the bottom
 }
 
 export function print(strings, ...values) {
-    let html = ``;
+    const {h} = snabbdom;
+    /** @type{Array<[any, snabbdom.VNodeChildren]>} */
+    let message = [];
     for (let i = 0; i < strings.length; i++) {
-        html += escapeHTML(strings[i]);
+        message.push([null, strings[i]]);
         if (i < values.length) {
             let v = values[i];
             if (v === world.player) {
-                html += `<span class="player" data-entityid="${v.id}">player</span>`;
+                message.push([
+                    {attrs: {class: "player"}, dataset: {entityid: v.id}},
+                    "player"
+                ]);
             } else if (world.entities.object.isPrototypeOf(v)) {
-                html += `<span class="entity" data-entityid="${v.id}">${escapeHTML(v.type)}</span>`;
+                message.push([
+                    {attrs: {class: "entity"}, dataset: {entityid: v.id}},
+                    v.type
+                ]);
             } else {
-                html += `<span class="other">${escapeHTML(v.toString())}</span>`;
+                message.push([
+                    {attrs: {class: "other"}},
+                    v.toString()
+                ]);
             }
         }
     }
-    messages.push(html);
+    messages.push(message);
     messages.splice(0, messages.length - MAX_MESSAGE_LINES);
     drawMessages();
 }
