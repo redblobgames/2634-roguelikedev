@@ -114,6 +114,16 @@
             td {
                 padding: 4px;
             }
+            input {
+                font-family: monospace;
+                border: none;
+                border-bottom: 1px dashed black;
+                width: calc-size(min-content + 1em);
+                field-sizing: content;
+                &:invalid {
+                    outline: 2px dashed red;
+                }
+            }
         }
     </style>
   </head>
@@ -127,6 +137,7 @@
       <div id="messages"></div>
       <div id="message-overlay"></div>
     </div>
+    <h3>Developer tool: spreadsheet</h3>
     <div id="world-entities"></div>
   </body>
 </html>
