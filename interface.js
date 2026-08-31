@@ -29,11 +29,13 @@ const display = new Display({
     fontSize: 18,
 });
 
+let drawAll;
 /** @type{any} */
 let world = {}; // circular I know but … haven't found a better way
 
-export function setupInputHandlers(worldGlobal, handleKeyDown) {
+export function setupInputHandlers(worldGlobal, handleKeyDown, drawAllGlobal) {
     world = worldGlobal;
+    drawAll = drawAllGlobal;
     const canvas = /** @type{HTMLCanvasElement} */(display.getContainer());
     document.querySelector("#game").append(canvas);
 
@@ -129,23 +131,71 @@ export function drawWorld(world) {
 }
 
 
-function formatValue(value) {
-    if (value === undefined) return "";
-    if (value === null) return "(null)";
-    if (Array.isArray(value)) return JSON.stringify(value);
-    if (typeof value === 'object') {
-        return Object.entries(value)
-            .map(([key, v]) => `${key}: ${JSON.stringify(v)}`)
-            .join(", ");
-    }
-    return value.toString();
-}
-
 /** @type{Element | snabbdom.VNode} */
 let drawTableVnode = document.querySelector("#world-entities");
 export function drawTable(table) {
     const {h} = snabbdom;
     const types = Object.keys(table.prototypes);
+
+    function formatValue(entity, column, value) {
+        if (value === undefined) return "";
+        switch (column) {
+            case 'location': return h('span',
+                ["map: ",
+                    h('input', {
+                        attrs: {type: 'text', required: true},
+                        props: {value: `${value.x},${value.y}`, pattern: "\\d+,\\d+"},
+                        on: {
+                            input: (e) => {
+                                const target = /** @type{HTMLInputElement} */(e.target);
+                                target.setCustomValidity("");
+                                if (!target.checkValidity()) {
+                                    target.setCustomValidity("Enter x,y");
+                                } else {
+                                    let [x, y] = target.value.split(",").map((word) => parseInt(word));
+                                    if (!world.tiles.findAny({walkable: true, position: {x, y}})) {
+                                        target.setCustomValidity("Not a walkable tile");
+                                    } else {
+                                        entity.location = {type: 'map', x, y};
+                                        drawAll();
+                                    }
+                                }
+                                target.reportValidity();
+                            },
+                        },
+                    }),
+                ]);
+            case 'fg': return h('span', [
+                h('span', {style: {background: value}}, "  "),
+                " ", value
+            ]);
+            case 'ai': return value.join("→");
+            case 'id': return value;
+            case 'type': return value; // TODO: drop-down
+            case 'renderOrder': return value;
+            case 'hp': return h('input', {
+                attrs: {type: 'number', required: true, min: 0, max: entity.fighter?.maxHp ?? 0},
+                props: {value},
+                on: {
+                    input: (e) => {
+                        const target = /** @type{HTMLInputElement} */(e.target);
+                        if (!target.checkValidity()) return;
+                        entity.hp = target.valueAsNumber;
+                        drawAll();
+                    }
+                },
+            });
+        }
+        if (value === null) return "(null)";
+        if (Array.isArray(value)) return JSON.stringify(value);
+        if (typeof value === 'object') {
+            return Object.entries(value)
+                .map(([key, v]) => `${key}: ${JSON.stringify(v)}`)
+                .join(", ");
+        }
+        return value.toString();
+    }
+
 
     let vnodeHeader = [];
     for (let column of table.columns) {
@@ -160,7 +210,7 @@ export function drawTable(table) {
                 let hue = 360 * types.indexOf(entity.type) / types.length;
                 attrs = {style: {color: `oklch(65% 0.05 ${hue}deg)`}};
             }
-            vnodeCols.push(h('td', attrs, [formatValue(entity[column])]));
+            vnodeCols.push(h('td', attrs, [formatValue(entity, column, entity[column])]));
         }
         vnodeRows.push(h('tr', vnodeCols));
     }
