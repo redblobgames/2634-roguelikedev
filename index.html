@@ -114,6 +114,17 @@
             td {
                 padding: 4px;
             }
+            input {
+                font-family: monospace;
+                border: none;
+                border-bottom: 1px dashed black;
+                min-width: 4em;
+                width: calc-size(min-content + 1em);
+                field-sizing: content;
+                &:invalid {
+                    outline: 2px dashed red;
+                }
+            }
         }
     </style>
   </head>

@@ -308,6 +308,6 @@ function drawAll() {
     drawMessages();
 }
 
-setupInputHandlers(world, handleKeyDown);
+setupInputHandlers(world, handleKeyDown, drawAll);
 generateDungeon();
 drawAll();

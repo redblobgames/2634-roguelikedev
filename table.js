@@ -29,6 +29,11 @@ export class Table {
         location: {unique: false, static: false}, // used with entities, where multiple can be in a location
     };
 
+    /**
+     * @param{string} name
+     * @param{Array<string>} columns
+     * @param{Array<object>} prototypes
+     */
     constructor(name, columns, prototypes) {
         this.name = name;
         this.object = {}; // the base class underneath all the prototypes
