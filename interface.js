@@ -121,12 +121,14 @@ export function drawWorld(world) {
         let position = {x: entity.location.x, y: entity.location.y};
         let tile = world.tiles.findOne({position});
 
-        display.draw(
-            position.x, position.y,
-            entity.shape,
-            entity.fg.replace(")", ` / ${tile.light})`),
-            bgColorAtTile(tile)
-        );
+        if (tile.light > 0.1) {
+            display.draw(
+                position.x, position.y,
+                entity.shape,
+                entity.fg,
+                bgColorAtTile(tile)
+            );
+        }
     }
 }
 
@@ -135,7 +137,7 @@ export function drawWorld(world) {
 let drawTableVnode = document.querySelector("#world-entities");
 export function drawTable(table) {
     const {h} = snabbdom;
-    const types = Object.keys(table.prototypes);
+    const types = Object.keys(table.readonlyPrototypes);
 
     function formatValue(entity, column, value) {
         if (value === undefined) return "";
@@ -165,10 +167,17 @@ export function drawTable(table) {
                         },
                     }),
                 ]);
-            case 'fg': return h('span', [
-                h('span', {style: {background: value}}, "  "),
-                " ", value
-            ]);
+            case 'fg': return h('input', {
+                attrs: {type: "color"},
+                props: {value},
+                on: {
+                    input: (e) => {
+                        const target = /** @type{HTMLInputElement} */(e.target);
+                        entity.fg = target.value;
+                        drawAll();
+                    }
+                },
+            });
             case 'ai': return value.join("→");
             case 'id': return value;
             case 'type': return value; // TODO: drop-down
@@ -196,34 +205,50 @@ export function drawTable(table) {
         return value.toString();
     }
 
-
-    let vnodeHeader = [];
+    let vnodeHeader1 = [];
     for (let column of table.columns) {
-        vnodeHeader.push(h('th', column));
+        vnodeHeader1.push(h('th', column));
     }
-    let vnodeRows = [];
+    let vnodeRows1 = [];
     for (let entity of table.rows) {
         let vnodeCols = [];
         for (let column of table.columns) {
-            let attrs = {};
-            if (!Object.hasOwn(entity, column) && !Object.hasOwn(entity, "__"+column)) {
-                let hue = 360 * types.indexOf(entity.type) / types.length;
-                attrs = {style: {color: `oklch(65% 0.05 ${hue}deg)`}};
-            }
-            vnodeCols.push(h('td', attrs, [formatValue(entity, column, entity[column])]));
+            vnodeCols.push(h('td', formatValue(entity, column, entity[column])));
         }
-        vnodeRows.push(h('tr', vnodeCols));
+        vnodeRows1.push(h('tr', vnodeCols));
     }
-    let vnodeTable = h("div#world-entities",
+
+    let vnodeHeader2 = [h('th', "type")];
+    for (let column of table.prototypeColumns) {
+        vnodeHeader2.push(h('th', column));
+    }
+    let vnodeRows2 = [];
+    for (let [type, prototype] of Object.entries(table.writablePrototypes)) {
+        let vnodeCols = [h('th', type)];
+        for (let column of table.prototypeColumns) {
+            vnodeCols.push(h('td', formatValue(prototype, column, prototype[column])));
+        }
+        vnodeRows2.push(h('tr', vnodeCols));
+    }
+
+    let vnodeTable = [
         h('table',
             {attrs: {rules: "all", border: "all"}},
             [
-                h('thead', h('tr', vnodeHeader)),
-                h('tbody', vnodeRows),
+                h('thead', h('tr', vnodeHeader1)),
+                h('tbody', vnodeRows1),
             ]
-        )
-    );
-    drawTableVnode = snabbdomPatch(drawTableVnode, vnodeTable);
+        ),
+        h('table',
+            {attrs: {rules: "all", border: "all"}},
+            [
+                h('thead', h('tr', vnodeHeader2)),
+                h('tbody', vnodeRows2),
+            ]
+        ),
+    ];
+
+    drawTableVnode = snabbdomPatch(drawTableVnode, h("div#world-entities", vnodeTable));
 }
 
 

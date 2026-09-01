@@ -32,17 +32,27 @@ export class Table {
     /**
      * @param{string} name
      * @param{Array<string>} columns
-     * @param{Array<object>} prototypes
+     * @param{Record<string, object>} prototypes
      */
     constructor(name, columns, prototypes) {
         this.name = name;
         this.object = {}; // the base class underneath all the prototypes
         this.columns = /** @type{Set<string>} */(new Set(['id', 'type', ...columns]));
-        this.prototypes = prototypes; // these will be the prototypes underneath each row
+        this.writablePrototypes = prototypes;
+        this.readonlyPrototypes = Object.fromEntries(
+            Object.entries(prototypes).map(([type, proto]) => [type, new Proxy(proto, {
+                // These will be the object prototypes underneath each
+                // row. We don't want them to be editable *through the
+                // row* itself. Use writablePrototypes to edit.
+                set: (target, prop, value, receiver) => {
+                    if (!this.columns.has(this.inverseColumnMap[prop.toString()])) throw `Error: no column ${type}.${prop.toString()} = ${value.toString()}`;
+                    Reflect.set(target, prop, value, receiver);
+                    return true;
+                }
+            })]));
         this.prototypeColumns = /** @type{Set<string>} */(new Set());
         for (let prototype of Object.values(prototypes)) {
             Object.setPrototypeOf(prototype, this.object);
-            Object.freeze(prototype);
             for (let column of Object.keys(prototype)) {
                 this.prototypeColumns.add(column);
                 Object.freeze(prototype[column]);
@@ -55,14 +65,17 @@ export class Table {
         // Construct a prototype object for this table, and backing fields/indices
         const table = this;
         this.columnMap = /** @type{Record<string, string>} */({});
+        this.inverseColumnMap = /** @type{Record<string, string>} */({});
         for (let column of this.columns) {
             this.columnMap[column] = column;
+            this.inverseColumnMap[column] = column;
 
             let index = Table.INDEX[column];
             if (index) {
                 this.indexes[column] = new Map();
                 let internalKey = `__${column}`;
                 this.columnMap[column] = internalKey;
+                this.inverseColumnMap[internalKey] = column;
                 Object.defineProperty(this.object, column, {
                     get() {
                         return this[internalKey];
@@ -87,9 +100,9 @@ export class Table {
     }
 
     create(type, init) {
-        if (!this.prototypes[type]) throw `Error: type must be one of ${Object.keys(this.prototypes)}`;
+        if (!this.readonlyPrototypes[type]) throw `Error: type must be one of ${Object.keys(this.readonlyPrototypes)}`;
         let id = ++this._nextId;
-        let row= Object.create(this.prototypes[type]);
+        let row= Object.create(null);
         row[this.columnMap.id] = id;
         row[this.columnMap.type] = type;
         for (let column of Object.keys(init)) {
@@ -99,6 +112,7 @@ export class Table {
         for (let column of Object.keys(this.indexes)) {
             this.#indexAdd(column, row);
         }
+        Object.setPrototypeOf(row, this.readonlyPrototypes[type]);
         this.rows.push(row);
         return row;
     }
