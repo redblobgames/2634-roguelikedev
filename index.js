@@ -89,8 +89,6 @@ let components = {
 let world = {
     entities: new Table('Entities', ['location', 'hp'],
         {
-            // NOTE: fg must be hsl(h s l) or rgb(r g b) with no alpha
-            // because we manipulate the color string elsewhere
             player: {shape: "@", fg: "hsl(60 100% 50%)", renderOrder: 1, blocksMovement: false, ...components.fighter(30, 2, 5)},
             corpse: {shape: "%", fg: "hsl(  0 20% 50%)", renderOrder: 9, blocksMovement: false},
             troll:  {shape: "T", fg: "hsl(120 60% 50%)", renderOrder: 2, ...components.enemy(10, 0, 3)},
