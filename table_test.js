@@ -88,3 +88,19 @@ test('Table skips indexing undefined values', () => {
 
     assert.strictEqual(table.indexes.position.size, 2);
 });
+
+test('Table rows can only mutate self columns', () => {
+    let prototypes = { kobold: { prototypeColumn: 50 } };
+    let table = new Table('entities', ['selfColumn'], prototypes);
+    let r1 = table.create('kobold', { selfColumn: 30 });
+
+    r1.selfColumn = 20;
+    assert.strictEqual(r1.selfColumn, 20);
+
+    assert.throws(() => {
+        r1.prototypeColumn = 50;
+    });
+    assert.throws(() => {
+        r1.nonexistent = 50;
+    });
+});
