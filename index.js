@@ -16,7 +16,6 @@ import { print, screenSize, drawAll, Layer, setupInputHandlers } from "./interfa
 RNG.setSeed(1234);
 const randint = RNG.getUniformInt.bind(RNG);
 
-
  /**
  * These are factory functions to construct commonly used groups of
  * components. These values are shared among all instances.
@@ -106,6 +105,10 @@ world = {
                 entity.location = {type: 'map', x: world.player.location.x, y: world.player.location.y};
                 print `You dropped the ${entity.type}.`;
                 return true;
+            }
+            case 'look': {
+                await Layer.look.waitForAnswer();
+                return false;
             }
             case 'move': {
                 let newX = world.player.location.x + action.dx;
