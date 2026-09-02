@@ -10,6 +10,7 @@
  * https://www.redblobgames.com/x/2025-roguelike-dev/
  */
 
+import { Table } from "./table.js";
 import { Display } from "./third-party/rotjs/index.js";
 import * as snabbdom from "./third-party/snabbdom/index.js";
 
@@ -130,6 +131,9 @@ export function drawWorld(world) {
             );
         }
     }
+    // TODO: if the player is standing on something, display that somewhere in the UI,
+    // and then move the "click for keyboard focus" instructions to be on top of that instead
+    // of on top of the health bar
 }
 
 
@@ -142,31 +146,46 @@ export function drawTable(table) {
     function formatValue(entity, column, value) {
         if (value === undefined) return "";
         switch (column) {
-            case 'location': return h('span',
-                ["map: ",
+            case 'location':
+                let formatted = value.type === 'map'? `map ${value.x},${value.y}` : `held by ${value.by}`;
+                return h('span',
                     h('input', {
                         attrs: {type: 'text', required: true},
-                        props: {value: `${value.x},${value.y}`, pattern: "\\d+,\\d+"},
+                        props: {value: formatted, pattern: "(map \\d+,\\d+|held by \\d+)"},
                         on: {
                             input: (e) => {
                                 const target = /** @type{HTMLInputElement} */(e.target);
                                 target.setCustomValidity("");
                                 if (!target.checkValidity()) {
-                                    target.setCustomValidity("Enter x,y");
+                                    target.setCustomValidity("Enter [map $x,$y] OR [held by $id]");
                                 } else {
-                                    let [x, y] = target.value.split(",").map((word) => parseInt(word));
-                                    if (!world.tiles.findAny({walkable: true, position: {x, y}})) {
-                                        target.setCustomValidity("Not a walkable tile");
-                                    } else {
-                                        entity.location = {type: 'map', x, y};
-                                        drawAll();
+                                    let words = target.value.split(" ");
+                                    switch (words[0]) {
+                                        case 'map':
+                                            let [x, y] = words[1].split(",").map((word) => parseInt(word));
+                                            if (!world.tiles.findAny({walkable: true, position: {x, y}})) {
+                                                target.setCustomValidity("Not a walkable tile");
+                                            } else {
+                                                entity.location = {type: 'map', x, y};
+                                                drawAll();
+                                            }
+                                            break;
+                                        case 'held':
+                                            let id = parseInt(words[2]);
+                                            if (!world.entities.findAny({id, inventory: Table.ANY})) {
+                                                target.setCustomValidity("Not an entity that has an inventory");
+                                            } else {
+                                                entity.location = {type: 'held', by: id};
+                                                drawAll();
+                                            }
+                                            break;
                                     }
                                 }
                                 target.reportValidity();
                             },
                         },
                     }),
-                ]);
+                );
             case 'fg': return h('input', {
                 attrs: {type: "color"},
                 props: {value},
@@ -178,10 +197,11 @@ export function drawTable(table) {
                     }
                 },
             });
-            case 'ai': return value.join("→");
+            case 'ai': return value.join(", ");
             case 'id': return value;
-            case 'type': return value; // TODO: drop-down
+            case 'type': return value;
             case 'renderOrder': return value;
+            case 'inventory': return value.map(entity => `${entity.type}.${entity.id}`).join(", ");
             case 'hp': return h('input', {
                 attrs: {type: 'number', required: true, min: 0, max: entity.fighter?.maxHp ?? 0},
                 props: {value},
@@ -198,6 +218,7 @@ export function drawTable(table) {
         if (value === null) return "(null)";
         if (Array.isArray(value)) return JSON.stringify(value);
         if (typeof value === 'object') {
+            // TODO: we could make the strings and numbers editable here
             return Object.entries(value)
                 .map(([key, v]) => `${key}: ${JSON.stringify(v)}`)
                 .join(", ");
@@ -219,13 +240,13 @@ export function drawTable(table) {
     }
 
     let vnodeHeader2 = [h('th', "type")];
-    for (let column of table.prototypeColumns) {
+    for (let column of table.prototypeColumns.difference(table.columns)) {
         vnodeHeader2.push(h('th', column));
     }
     let vnodeRows2 = [];
     for (let [type, prototype] of Object.entries(table.writablePrototypes)) {
         let vnodeCols = [h('th', type)];
-        for (let column of table.prototypeColumns) {
+        for (let column of table.prototypeColumns.difference(table.columns)) {
             vnodeCols.push(h('td', formatValue(prototype, column, prototype[column])));
         }
         vnodeRows2.push(h('tr', vnodeCols));
