@@ -81,6 +81,9 @@ let components = {
     enemy(hp, defense, attack) {
         return {blocksMovement: true, ai: ['hostile'], ...this.fighter(hp, defense, attack)};
     },
+    holdable() {
+        return {blocksMovement: false, holdable: true};
+    },
 };
 
 /**
@@ -93,6 +96,7 @@ let world = {
             corpse: {shape: "%", fg: "hsl(  0 20% 50%)", renderOrder: 9, blocksMovement: false},
             troll:  {shape: "T", fg: "hsl(120 60% 50%)", renderOrder: 2, ...components.enemy(10, 0, 3)},
             orc:    {shape: "o", fg: "hsl(100 30% 50%)", renderOrder: 2, ...components.enemy(16, 1, 4)},
+            health_potion: {shape: "!", fg: "rgb(127 0 255)", renderOrder: 3, consumable: {type: 'heal', amount: 4}},
         }
     ),
     tiles: new Table('Tiles', ['position', 'light', 'maxLight'],
@@ -139,6 +143,20 @@ function generateDungeon() {
                 let type = randint(0, 3) === 0? 'troll' : 'orc';
                 let enemy = world.entities.create(type, {location, hp: 0});
                 enemy.hp = enemy.fighter.maxHp;
+            }
+        }
+    }
+
+    // Create items in each room
+    const maxItemsPerRoom = 2;
+    for (let room of rooms) {
+        let numItems = randint(0, maxItemsPerRoom);
+        for (let i = 0; i < numItems; i++) {
+            let x = randint(room.getLeft(), room.getRight()),
+                y = randint(room.getTop(), room.getBottom());
+            let location = {type: 'map', x, y};
+            if (!world.entities.findAny({location})) {
+                world.entities.create('health_potion', {location});
             }
         }
     }
