@@ -7,7 +7,7 @@
 
 import { RNG, Map as RotMap, FOV } from "./third-party/rotjs/index.js";
 import { Table } from "./table.js";
-import { print, screenSize, drawAll, handleOverlayInventory, handleOverlayDrop, handleOverlayLook, handleOverlayChooseEnemy, setupInputHandlers } from "./interface.js";
+import { print, screenSize, drawAll, handleOverlayInventory, handleOverlayDrop, handleOverlayLook, handleOverlayChooseEnemy, handleOverlayChoosePosition, setupInputHandlers } from "./interface.js";
 
 /**
  * @import { Action } from "./interface.js"
@@ -49,6 +49,7 @@ world = {
             health_potion: {shape: "!", fg: "rgb(127 0 255)", renderOrder: 3, ...components.holdable(), consumable: {type: 'heal', amount: 4}},
             lightning_potion: {shape: "~", fg: "rgb(255 255 0)", renderOrder: 3, ...components.holdable(), consumable: {type: 'lightning', damage: 20, range: 5}},
             confusion_scroll: {shape: "~", fg: "rgb(207 63 255)", renderOrder: 3, ...components.holdable(), consumable: {type: 'confusion', turns: 10}},
+            fireball_scroll: {shape: "~", fg: "rgb(255 0 0)", renderOrder: 3, ...components.holdable(), consumable: {type: 'fireball', damage: 12, radius: 3}},
         }
     ),
     tiles: new Table('Tiles', ['position', 'light', 'maxLight'],
@@ -187,6 +188,8 @@ function generateDungeon() {
                 let itemChance = randint(0, 9);
                 if (itemChance < 7) {
                     world.entities.create('health_potion', {location});
+                } else if (itemChance < 8) {
+                    world.entities.create('fireball_scroll', {location});
                 } else if (itemChance < 9) {
                     world.entities.create('confusion_scroll', {location});
                 } else {
@@ -283,6 +286,32 @@ async function handleConsumable(entity) {
             print `The eyes of the ${target} look vacant, as it starts to stumble around!`;
             target.ai.unshift({type: 'confused', turns: entity.consumable.turns});
             return true;
+        }
+        case 'fireball': {
+            print `Select a target location.`;
+            let position = await handleOverlayChoosePosition.waitForAnswer({radius: entity.consumable.radius});
+            if (!position) return false; // cancelled
+
+            let tile = world.tiles.findAny({position});
+            if (tile.light === 0.0) {
+                print `You cannot target an area that you cannot see.`;
+                return false;
+            }
+
+            let targetsHit = false;
+            for (let target of world.entities.findAll({ai: Table.ANY})) {
+                if (target.location.type === 'map' && distanceBetween(target.location, position) <= entity.consumable.radius) {
+                    let damaged = adjustHealth(target, -entity.consumable.damage);
+                    print `The ${target} is engulfed in a fiery explosion, taking ${damaged} damage!`;
+                    targetsHit = true;
+                }
+            }
+            if (targetsHit) {
+                entity.location = {type: 'void'};
+                return true;
+            }
+            print `There are no targets in the radius.`;
+            return false;
         }
     }
     throw `Unknown consumable type ${entity.consumable.type}`;

@@ -413,7 +413,7 @@ export function showTemporaryMessage(text) {
 /* Event handlers */
 
 function currentEventHandler() {
-    for (let handler of [handlePlayerDead, handleOverlayLook, handleOverlayDrop, handleOverlayInventory, handleOverlayChooseEnemy]) {
+    for (let handler of [handlePlayerDead, handleOverlayLook, handleOverlayDrop, handleOverlayInventory, handleOverlayChooseEnemy, handleOverlayChoosePosition]) {
         if (handler.visible) return handler;
     }
     return handleGameMap;
@@ -499,12 +499,12 @@ function makeInventoryPicker({el, action, filter}) {
     };
 }
 
-function makeMapLocationPicker({el, check}) {
+function makeMapLocationPicker({el, check, draw=null}) {
     return {
         el: document.querySelector(el),
         _waiting: null,
         get visible() { return this._waiting !== null; },
-        waitForAnswer() {
+        waitForAnswer(config={}) {
             return new Promise((resolve) => {
                 this.el.classList.add('visible');
                 this._waiting = {
@@ -513,6 +513,7 @@ function makeMapLocationPicker({el, check}) {
                         resolve(answer);
                     },
                     position: {x: world.player.location.x, y: world.player.location.y},
+                    ...config
                 };
                 this.draw();
             });
@@ -563,6 +564,7 @@ function makeMapLocationPicker({el, check}) {
                     check(this._waiting.position) ? "cyan" : "white"
                 );
             }
+            if (draw) draw.apply(this);
         },
     };
 }
@@ -593,5 +595,25 @@ export let handleOverlayChooseEnemy = makeMapLocationPicker({
         if (tile.light === 0.0) return false;
         let target = world.entities.findAny({ai: Table.ANY, location: {type: 'map', x: position.x, y: position.y}});
         return !!target;
+    },
+});
+
+export let handleOverlayChoosePosition = makeMapLocationPicker({
+    el: "#choose-position",
+    check(position) {
+        let tile = world.tiles.findAny({walkable: true, position});
+        return tile && tile.light > 0.0;
+    },
+    draw() {
+        if (!this._waiting) return;
+        let {position, radius} = this._waiting;
+        for (let x = position.x - radius; x <= position.x + radius; x++) {
+            for (let y = position.y - radius; y <= position.y + radius; y++) {
+                let tile = world.tiles.findAny({position: {x, y}});
+                if (tile && tile.light > 0.0) {
+                    display.drawOver(x, y, null, "white", "red");
+                }
+            }
+        }
     },
 });
