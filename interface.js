@@ -33,6 +33,8 @@ const display = new Display({
 /** @type{any} */
 let world = {}; // circular I know but … haven't found a better way
 
+function clamp(x, lo, hi) { return x < lo ? lo : x > hi ? hi : x; }
+
 export function setupInputHandlers(worldGlobal) {
     world = worldGlobal;
     const canvas = /** @type{HTMLCanvasElement} */(display.getContainer());
@@ -42,6 +44,7 @@ export function setupInputHandlers(worldGlobal) {
     canvas.addEventListener('keydown', (event) => currentEventHandler().handleKeyDown?.(event));
     canvas.addEventListener('mousemove', (event) => currentEventHandler().handleMousemove?.(event));
     canvas.addEventListener('mouseout', (event) => currentEventHandler().handleMouseout?.(event));
+    canvas.addEventListener('click', (event) => currentEventHandler().handleClick?.(event));
 
     const onBlur= () => focusReminder.classList.toggle('visible', true);
     const onFocus = () => focusReminder.classList.toggle('visible', false);
@@ -53,6 +56,52 @@ export function setupInputHandlers(worldGlobal) {
 }
 
 /**
+ * @param {KeyboardEvent} event
+ * @returns {null | {dx: number, dy: number}}
+ */
+function getDirectionFromKey(event) {
+    // I want to be able to use the numpad whether NumLock is off or
+    // on. That requires using event.code.
+    const REMAP_NUMPAD = {
+        Numpad7: 'Home',
+        Numpad8: 'ArrowUp',
+        Numpad9: 'PageUp',
+        Numpad4: 'ArrowLeft',
+        Numpad6: 'ArrowRight',
+        Numpad1: 'End',
+        Numpad2: 'ArrowDown',
+        Numpad3: 'PageDown',
+    };
+    // But for the other keys I want to use event.key, because it
+    // honors the current layout.
+    const REMAP_VI_KEYS = {
+        h:       'ArrowLeft',
+        j:       'ArrowDown',
+        k:       'ArrowUp',
+        l:       'ArrowRight',
+        y:       'Home',
+        u:       'PageUp',
+        b:       'End',
+        n:       'PageDown',
+    };
+    const KEYMAP = {
+        Home:       {dx: -1, dy: -1},
+        ArrowUp:    {dx:  0, dy: -1},
+        PageUp:     {dx: +1, dy: -1},
+        ArrowLeft:  {dx: -1, dy:  0},
+        ArrowRight: {dx: +1, dy:  0},
+        End:        {dx: -1, dy: +1},
+        ArrowDown:  {dx:  0, dy: +1},
+        PageDown:   {dx: +1, dy: +1},
+    };
+
+    let key = REMAP_NUMPAD[event.code] ?? event.key;
+    key = REMAP_VI_KEYS[key] ?? key;
+    return KEYMAP[key] ?? null;
+}
+
+
+/**
  * Determine which action occurs when a key is pressed.
  *
  * @typedef {
@@ -61,6 +110,7 @@ export function setupInputHandlers(worldGlobal) {
      | {type: 'wait'}
      | {type: 'item'}
      | {type: 'drop'}
+     | {type: 'look'}
      | {type: 'none'}
    } Action
  *
@@ -68,51 +118,19 @@ export function setupInputHandlers(worldGlobal) {
  * @returns {Action}
  */
 function keyToAction(event) {
-    // I want to be able to use the numpad whether NumLock is off or
-    // on. That requires using event.code.
-    const REMAP_NUMPAD = {
-        Numpad7: 'Home',
-        Numpad8: 'ArrowUp',
-        Numpad9: 'PageUp',
-        Numpad4: 'ArrowLeft',
-        Numpad5: '.',
-        Numpad6: 'ArrowRight',
-        Numpad1: 'End',
-        Numpad2: 'ArrowDown',
-        Numpad3: 'PageDown',
-    }
-    // But for the other keys I want to use event.key, because it
-    // honors the current layout.
-    const REMAP_VI_KEYS = {
-        h: 'ArrowLeft',
-        j: 'ArrowDown',
-        k: 'ArrowUp',
-        l: 'ArrowRight',
-        y: 'Home',
-        u: 'PageUp',
-        b: 'End',
-        n: 'PageDown',
-    };
     // The main keybindings are using event.key
     /** @type{Record<string, Action>} */
     const KEYMAP = {
-        Home:       {type: 'move', dx: -1, dy: -1},
-        ArrowUp:    {type: 'move', dx:  0, dy: -1},
-        PageUp:     {type: 'move', dx: +1, dy: -1},
-        ArrowLeft:  {type: 'move', dx: -1, dy:  0},
-        ArrowRight: {type: 'move', dx: +1, dy:  0},
-        End:        {type: 'move', dx: -1, dy: +1},
-        ArrowDown:  {type: 'move', dx:  0, dy: +1},
-        PageDown:   {type: 'move', dx: +1, dy: +1},
         ['.']:      {type: 'wait'},
         g:          {type: 'get'},
         i:          {type: 'item'},
         d:          {type: 'drop'},
+        ['/']:      {type: 'look'},
     };
 
-    let key = REMAP_NUMPAD[event.code] ?? event.key;
-    key = REMAP_VI_KEYS[key] ?? key;
-    return KEYMAP[key] ?? {type: 'none'};
+    let movement = getDirectionFromKey(event);
+    if (movement) return {type: 'move', ...movement};
+    return KEYMAP[event.key] ?? {type: 'none'};
 }
 
 const BG_COLOR = {
@@ -393,14 +411,14 @@ export function showTemporaryMessage(text) {
 /* Event handlers */
 
 function currentEventHandler() {
-    if (handleOverlayDrop.visible) return handleOverlayDrop;
-    if (handleOverlayInventory.visible) return handleOverlayInventory;
-    if (world.player.hp === 0) return handlePlayerDead;
-    else return handleGameMap;
-
+    for (let handler of [handlePlayerDead, handleOverlayLook, handleOverlayDrop, handleOverlayInventory]) {
+        if (handler.visible) return handler;
+    }
+    return handleGameMap;
 }
 
 const handlePlayerDead = {
+    get visible() { return world.player.hp === 0; }
 }
 
 const handleGameMap = {
@@ -477,6 +495,70 @@ function makeInventoryPicker({el, action, filter}) {
     };
 }
 
+function makeMapLocationPicker({el}) {
+    return {
+        el: document.querySelector(el),
+        _waiting: null,
+        get visible() { return this._waiting !== null; },
+        waitForAnswer() {
+            return new Promise((resolve) => {
+                this.el.classList.add('visible');
+                this._waiting = {resolve, position: {x: world.player.location.x, y: world.player.location.y}};
+                this.draw();
+            });
+        },
+        handleKeyDown(event) {
+            let waiting = this._waiting;
+            let movement = getDirectionFromKey(event);
+            if (movement) {
+                event.preventDefault();
+                let step = event.shiftKey ? 5 : event.ctrlKey ? 10 : event.altKey ? 20 : 1;
+                let position = {
+                    x: clamp(waiting.position.x + step * movement.dx, 0, screenSize.x - 1),
+                    y: clamp(waiting.position.y + step * movement.dy, 0, screenSize.y - 1),
+                };
+                this._waiting.position = position;
+                this.draw();
+                return;
+            }
+            if (event.key === 'Escape' || event.key === 'Enter') {
+                event.preventDefault();
+                let answer = event.key === 'Enter';
+                this.el.classList.remove('visible');
+                this._waiting = null;
+                this.draw();
+                waiting.resolve(answer);
+            }
+        },
+        handleMousemove(event) {
+            let [x, y] = display.eventToPosition(event); // returns -1, -1 for out of bounds
+            if (x < 0 || y < 0) return false;
+            this._waiting.position = {x, y};
+            this.draw();
+            return true;
+        },
+        handleClick(event) {
+            let waiting = this._waiting;
+            let clickValid = this.handleMousemove(event);
+            this._waiting = null;
+            this.draw();
+            waiting.resolve(clickValid);
+        },
+        draw() {
+            drawAll();
+            if (this._waiting) {
+                display.drawOver(
+                    this._waiting.position.x, this._waiting.position.y,
+                    null,
+                    "black",
+                    "cyan"
+                );
+            }
+        },
+    };
+}
+
+
 export let handleOverlayInventory = makeInventoryPicker({
     el: "#inventory-use",
     action: "use",
@@ -487,4 +569,8 @@ export let handleOverlayDrop = makeInventoryPicker({
     el: "#inventory-drop",
     action: "drop",
     filter: (entities) => entities,
+});
+
+export let handleOverlayLook = makeMapLocationPicker({
+    el: "#look-around",
 });

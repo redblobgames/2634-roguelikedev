@@ -7,7 +7,7 @@
 
 import { RNG, Map as RotMap, FOV } from "./third-party/rotjs/index.js";
 import { Table } from "./table.js";
-import { print, screenSize, drawAll, handleOverlayInventory, handleOverlayDrop, setupInputHandlers } from "./interface.js";
+import { print, screenSize, drawAll, handleOverlayInventory, handleOverlayDrop, handleOverlayLook, setupInputHandlers } from "./interface.js";
 
 /**
  * @import { Action } from "./interface.js"
@@ -15,7 +15,6 @@ import { print, screenSize, drawAll, handleOverlayInventory, handleOverlayDrop, 
 
 RNG.setSeed(1234);
 const randint = RNG.getUniformInt.bind(RNG);
-
 
  /**
  * These are factory functions to construct commonly used groups of
@@ -106,6 +105,10 @@ world = {
                 entity.location = {type: 'map', x: world.player.location.x, y: world.player.location.y};
                 print `You dropped the ${entity.type}.`;
                 return true;
+            }
+            case 'look': {
+                await handleOverlayLook.waitForAnswer();
+                return false;
             }
             case 'move': {
                 let newX = world.player.location.x + action.dx;

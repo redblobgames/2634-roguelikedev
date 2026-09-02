@@ -10,7 +10,7 @@
         #game-container {
             display: grid;
             grid-template-columns: min-content;
-            grid-template-areas: "game" "status-bar" "message-area";
+            grid-template-areas: "game" "status-bar" "instructions" "message-area";
         }
 
         #game {
@@ -23,20 +23,6 @@
                     outline: none;
                     opacity: 1.0;
                 }
-            }
-        }
-
-        #focus-reminder {
-            grid-area: status-bar;
-            text-align: center; /* horizontal */
-            align-self: center; /* vertical */
-            background: hsl(60 100% 75%);
-            padding-block: 0.25em;
-            color: black;
-            opacity: 0.0;
-            transition: all 0.2s;
-            &.visible {
-                opacity: 1.0;
             }
         }
 
@@ -89,9 +75,38 @@
             }
         }
 
+        #instructions {
+            grid-area: instructions;
+            background: hsl(60 10% 10%);
+            color: white;
+            min-height: 1.5em;
+
+            > * {
+                display: none;
+                font-size: 0.8em;
+                text-align: center;
+                padding-block: 0.25em;
+                transition: all 0.2s;
+                opacity: 0.0;
+            }
+
+            > *.visible {
+                display: block;
+                opacity: 1.0;
+                background: hsl(150 20% 20%);
+                color: white;
+            }
+
+            #focus-reminder {
+                background: hsl(60 100% 75%);
+                color: black;
+            }
+        }
+
         #health-bar-bg {
             grid-area: status-bar;
             background: hsl(0 50% 20%);
+            height: 1.5em;
         }
         #health-bar-fg {
             grid-area: status-bar;
@@ -187,7 +202,10 @@
         <div id="health-bar-bg"></div>
         <div id="health-bar-fg"></div>
         <div id="health-bar-text"></div>
-        <div id="focus-reminder">Click game for keyboard focus</div>
+        <div id="instructions">
+          <div id="look-around">Keyboard/mouse to look around</div>
+          <div id="focus-reminder">Click game for keyboard focus</div>
+        </div>
         <div id="messages"></div>
         <div id="message-overlay"></div>
         <div id="inventory-use" class="overlay"></div>
