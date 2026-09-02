@@ -7,7 +7,7 @@
 
 import { RNG, Map as RotMap, FOV } from "./third-party/rotjs/index.js";
 import { Table } from "./table.js";
-import { print, screenSize, drawAll, setupInputHandlers } from "./interface.js";
+import { print, screenSize, drawAll, Layer, setupInputHandlers } from "./interface.js";
 
 /**
  * @import { Action } from "./interface.js"
@@ -16,7 +16,8 @@ import { print, screenSize, drawAll, setupInputHandlers } from "./interface.js";
 RNG.setSeed(1234);
 const randint = RNG.getUniformInt.bind(RNG);
 
-/**
+
+ /**
  * These are factory functions to construct commonly used groups of
  * components. These values are shared among all instances.
  */
@@ -88,6 +89,25 @@ world = {
                 entity.location = {type: 'held', by: world.player.id};
                 print `You pick up ${entity}.`;
                 return true;
+            }
+            case 'item': {
+                let entity = await Layer.inventory.waitForAnswer();
+                if (entity === null) {
+                    return false; // action cancelled
+                }
+                switch (entity.consumable.type) {
+                    case 'heal':
+                        if (world.player.hp >= world.player.fighter.maxHp) {
+                            print `Your health is already full.`;
+                            return false;
+                        }
+                        let amountRecovered = Math.min(entity.consumable.amount, world.player.fighter.maxHp - world.player.hp);
+                        entity.location = {type: 'void'}; // where all used-up things go
+                        world.player.hp += amountRecovered;
+                        print `You consume the ${entity.type}, and recover ${amountRecovered} hp!`;
+                        return true;
+                }
+                throw `Unknown consumable type ${entity.consumable.type}`;
             }
             case 'move': {
                 let newX = world.player.location.x + action.dx;
@@ -247,7 +267,6 @@ function handleAi(enemy) {
             return;
     }
 }
-
 
 setupInputHandlers(world);
 generateDungeon();
