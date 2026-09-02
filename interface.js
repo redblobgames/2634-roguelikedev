@@ -59,6 +59,7 @@ export function setupInputHandlers(worldGlobal) {
        {type: 'move', dx: number, dy: number}
      | {type: 'get'}
      | {type: 'wait'}
+     | {type: 'item'}
      | {type: 'none'}
    } Action
  *
@@ -104,6 +105,7 @@ function keyToAction(event) {
         PageDown:   {type: 'move', dx: +1, dy: +1},
         ['.']:      {type: 'wait'},
         g:          {type: 'get'},
+        i:          {type: 'item'},
     };
 
     let key = REMAP_NUMPAD[event.code] ?? event.key;
@@ -183,17 +185,17 @@ export function drawTable(table) {
         if (value === undefined) return "";
         switch (column) {
             case 'location':
-                let formatted = value.type === 'map'? `map ${value.x},${value.y}` : `held by ${value.by}`;
+                let formatted = value.type === 'map'? `map ${value.x},${value.y}` : value.type === 'held' ? `held by ${value.by}` : `void`;
                 return h('span',
                     h('input', {
                         attrs: {type: 'text', required: true},
-                        props: {value: formatted, pattern: "(map \\d+,\\d+|held by \\d+)"},
+                        props: {value: formatted, pattern: "(map \\d+,\\d+|held by \\d+|void)"},
                         on: {
                             input: (e) => {
                                 const target = /** @type{HTMLInputElement} */(e.target);
                                 target.setCustomValidity("");
                                 if (!target.checkValidity()) {
-                                    target.setCustomValidity("Enter [map $x,$y] OR [held by $id]");
+                                    target.setCustomValidity("Enter [map $x,$y] OR [held by $id] OR [void]");
                                 } else {
                                     let words = target.value.split(" ");
                                     switch (words[0]) {
@@ -215,6 +217,9 @@ export function drawTable(table) {
                                                 drawAll();
                                             }
                                             break;
+                                        case 'void':
+                                            entity.location = {type: 'void'};
+                                            drawAll();
                                     }
                                 }
                                 target.reportValidity();
@@ -386,6 +391,7 @@ export function showTemporaryMessage(text) {
 /* Event handlers */
 
 function currentEventHandler() {
+    if (handleOverlayInventory.visible) return handleOverlayInventory;
     if (world.player.hp === 0) return handlePlayerDead;
     else return handleGameMap;
 
@@ -421,4 +427,47 @@ const handleGameMap = {
     handleMouseout(event) {
         showTemporaryMessage("");
     }
+};
+
+export let handleOverlayInventory = {
+    el: document.querySelector("#inventory-use"),
+    _waiting: null,
+    get visible() { return this._waiting !== null; },
+    waitForAnswer() {
+        return new Promise((resolve) => {
+            this.el.classList.add('visible');
+            this._waiting = {resolve, keys: this.draw()};
+        });
+    },
+    handleKeyDown(event) {
+        if (event.key === 'Escape' || this._waiting.keys.has(event.key.toUpperCase())) {
+            let waiting = this._waiting;
+            let answer = event.key === 'Escape'? null : waiting.keys.get(event.key.toUpperCase());
+            event.preventDefault();
+            this.el.classList.remove('visible');
+            this._waiting = null;
+            waiting.resolve(answer);
+        }
+    },
+    draw() {
+        let keys = new Map();
+        let html = ``;
+        let consumables = world.player.inventory.filter((entity) => entity.consumable);
+        if (world.player.inventory.length === 0) {
+            html = `<div>Your inventory is empty. Press <kbd>ESC</kbd> to cancel.</div>${html}`;
+        } else if (consumables.length === 0) {
+            html = `<div>You have nothing you can use. Press <kbd>ESC</kbd> to cancel.</div>${html}`;
+        } else {
+            html = `<ul>`;
+            consumables.forEach((entity, i) => {
+                let key = String.fromCharCode(65 + i);
+                keys.set(key, entity);
+                html += `<li><kbd>${key}</kbd> ${entity.type}.${entity.id}</li>`;
+            });
+            html += `</ul>`;
+            html = `<div>Select an item to use it, or <kbd>ESC</kbd> to cancel.</div>${html}`;
+        }
+        this.el.innerHTML = html;
+        return keys;
+    },
 };

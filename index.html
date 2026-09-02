@@ -40,6 +40,55 @@
             }
         }
 
+        .overlay {
+            grid-area: game;
+            z-index: 0;
+            height: auto;
+            align-self: center;
+            padding: 0.5em;
+            line-height: 1.0;
+            font-family: monospace;
+            font-size: 0.8em;
+            opacity: 0;
+
+            &.visible {
+                z-index: 2;
+                pointer-events: none;
+                box-shadow: 0 1px 4px -3px white;
+                opacity: 1;
+            }
+            ul {
+                column-count: 2;
+                column-gap: 1em;
+                column-fill: balance;
+                li {
+                    list-style-type: none;
+                }
+            }
+            kbd {
+                display: inline-block;
+                border: 1px solid hsla(0, 0%, 0%, 0.5);
+                padding: 2px 4px;
+                font-weight: normal;
+            }
+        }
+        #inventory-use {
+            background: hsl(200, 10%, 20%);
+            color: white;
+            kbd {
+                background: hsl(150, 50%, 30%);
+                color: cyan;
+            }
+        }
+        #inventory-drop {
+            background: hsl(0, 20%, 20%);
+            color: white;
+            kbd {
+                background: hsl(60, 50%, 30%);
+                color: yellow;
+            }
+        }
+
         #health-bar-bg {
             grid-area: status-bar;
             background: hsl(0 50% 20%);
@@ -141,6 +190,8 @@
         <div id="focus-reminder">Click game for keyboard focus</div>
         <div id="messages"></div>
         <div id="message-overlay"></div>
+        <div id="inventory-use" class="overlay"></div>
+        <div id="inventory-drop" class="overlay"></div>
       </div>
       <div id="world-entities"></div>
     </div>
