@@ -258,7 +258,9 @@ export function drawTable(table) {
                     }
                 },
             });
-            case 'ai': return value.join(", ");
+            case 'ai': return value.map((ai) =>
+                "{" + Object.entries(ai).map(([k, v]) => `${k}: ${v}`).join(", ") + "}"
+            ).join(" ");
             case 'id': return value;
             case 'type': return value;
             case 'renderOrder': return value;
@@ -281,7 +283,7 @@ export function drawTable(table) {
         if (typeof value === 'object') {
             // TODO: we could make the strings and numbers editable here
             return Object.entries(value)
-                .map(([key, v]) => `${key}: ${JSON.stringify(v)}`)
+                .map(([k, v]) => `${k}: ${JSON.stringify(v)}`)
                 .join(", ");
         }
         return value.toString();
@@ -411,7 +413,7 @@ export function showTemporaryMessage(text) {
 /* Event handlers */
 
 function currentEventHandler() {
-    for (let handler of [handlePlayerDead, handleOverlayLook, handleOverlayDrop, handleOverlayInventory]) {
+    for (let handler of [handlePlayerDead, handleOverlayLook, handleOverlayDrop, handleOverlayInventory, handleOverlayChooseEnemy]) {
         if (handler.visible) return handler;
     }
     return handleGameMap;
@@ -458,7 +460,10 @@ function makeInventoryPicker({el, action, filter}) {
         waitForAnswer() {
             return new Promise((resolve) => {
                 this.el.classList.add('visible');
-                this._waiting = {resolve, keys: this.draw()};
+                this._waiting = {resolve: (answer) => {
+                    this.el.classList.remove('visible');
+                    resolve(answer);
+                }, keys: this.draw()};
             });
         },
         handleKeyDown(event) {
@@ -466,7 +471,6 @@ function makeInventoryPicker({el, action, filter}) {
                 let waiting = this._waiting;
                 let answer = event.key === 'Escape'? null : waiting.keys.get(event.key.toUpperCase());
                 event.preventDefault();
-                this.el.classList.remove('visible');
                 this._waiting = null;
                 waiting.resolve(answer);
             }
@@ -495,7 +499,7 @@ function makeInventoryPicker({el, action, filter}) {
     };
 }
 
-function makeMapLocationPicker({el}) {
+function makeMapLocationPicker({el, check}) {
     return {
         el: document.querySelector(el),
         _waiting: null,
@@ -503,7 +507,13 @@ function makeMapLocationPicker({el}) {
         waitForAnswer() {
             return new Promise((resolve) => {
                 this.el.classList.add('visible');
-                this._waiting = {resolve, position: {x: world.player.location.x, y: world.player.location.y}};
+                this._waiting = {
+                    resolve: (answer) => {
+                        this.el.classList.remove('visible');
+                        resolve(answer);
+                    },
+                    position: {x: world.player.location.x, y: world.player.location.y},
+                };
                 this.draw();
             });
         },
@@ -523,8 +533,7 @@ function makeMapLocationPicker({el}) {
             }
             if (event.key === 'Escape' || event.key === 'Enter') {
                 event.preventDefault();
-                let answer = event.key === 'Enter';
-                this.el.classList.remove('visible');
+                let answer = event.key === 'Enter'? waiting.position : null;
                 this._waiting = null;
                 this.draw();
                 waiting.resolve(answer);
@@ -542,7 +551,7 @@ function makeMapLocationPicker({el}) {
             let clickValid = this.handleMousemove(event);
             this._waiting = null;
             this.draw();
-            waiting.resolve(clickValid);
+            waiting.resolve(clickValid ? waiting.position : null);
         },
         draw() {
             drawAll();
@@ -551,7 +560,7 @@ function makeMapLocationPicker({el}) {
                     this._waiting.position.x, this._waiting.position.y,
                     null,
                     "black",
-                    "cyan"
+                    check(this._waiting.position) ? "cyan" : "white"
                 );
             }
         },
@@ -573,4 +582,16 @@ export let handleOverlayDrop = makeInventoryPicker({
 
 export let handleOverlayLook = makeMapLocationPicker({
     el: "#look-around",
+    check(position) { return true; },
+});
+
+export let handleOverlayChooseEnemy = makeMapLocationPicker({
+    el: "#choose-enemy",
+    check(position) {
+        // NOTE: this duplicates some of the logic in the confusion spell cast code
+        let tile = world.tiles.findAny({position});
+        if (tile.light === 0.0) return false;
+        let target = world.entities.findAny({ai: Table.ANY, location: {type: 'map', x: position.x, y: position.y}});
+        return !!target;
+    },
 });

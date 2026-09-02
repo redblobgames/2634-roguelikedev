@@ -7,7 +7,7 @@
 
 import { RNG, Map as RotMap, FOV } from "./third-party/rotjs/index.js";
 import { Table } from "./table.js";
-import { print, screenSize, drawAll, handleOverlayInventory, handleOverlayDrop, handleOverlayLook, setupInputHandlers } from "./interface.js";
+import { print, screenSize, drawAll, handleOverlayInventory, handleOverlayDrop, handleOverlayLook, handleOverlayChooseEnemy, setupInputHandlers } from "./interface.js";
 
 /**
  * @import { Action } from "./interface.js"
@@ -25,7 +25,7 @@ let components = {
         return {fighter: {maxHp, defense, attack}};
     },
     enemy(hp, defense, attack) {
-        return {blocksMovement: true, ai: ['hostile'], ...this.fighter(hp, defense, attack)};
+        return {blocksMovement: true, ...this.fighter(hp, defense, attack)};
     },
     holdable() {
         return {blocksMovement: false, holdable: true};
@@ -37,7 +37,7 @@ let components = {
  */
 let world; // HACK: circular dependency workaround
 world = {
-    entities: new Table('Entities', ['location', 'hp', 'inventory'],
+    entities: new Table('Entities', ['location', 'hp', 'inventory', 'ai'],
         {
             player: {
                 shape: "@", fg: "hsl(60 100% 50%)", renderOrder: 1, blocksMovement: false, ...components.fighter(30, 2, 5),
@@ -48,6 +48,7 @@ world = {
             orc:    {shape: "o", fg: "hsl(100 30% 50%)", renderOrder: 2, ...components.enemy(16, 1, 4)},
             health_potion: {shape: "!", fg: "rgb(127 0 255)", renderOrder: 3, ...components.holdable(), consumable: {type: 'heal', amount: 4}},
             lightning_potion: {shape: "~", fg: "rgb(255 255 0)", renderOrder: 3, ...components.holdable(), consumable: {type: 'lightning', damage: 20, range: 5}},
+            confusion_scroll: {shape: "~", fg: "rgb(207 63 255)", renderOrder: 3, ...components.holdable(), consumable: {type: 'confusion', turns: 10}},
         }
     ),
     tiles: new Table('Tiles', ['position', 'light', 'maxLight'],
@@ -95,7 +96,7 @@ world = {
                 if (entity === null) {
                     return false; // action cancelled
                 }
-                return handleConsumable(entity);
+                return await handleConsumable(entity);
             }
             case 'drop': {
                 let entity = await handleOverlayDrop.waitForAnswer();
@@ -168,7 +169,7 @@ function generateDungeon() {
             let location = {type: 'map', x, y};
             if (!world.entities.findAny({location})) {
                 let type = randint(0, 3) === 0? 'troll' : 'orc';
-                let enemy = world.entities.create(type, {location, hp: 0});
+                let enemy = world.entities.create(type, {location, hp: 0, ai: [{type: 'hostile'}]});
                 enemy.hp = enemy.fighter.maxHp;
             }
         }
@@ -183,8 +184,11 @@ function generateDungeon() {
                 y = randint(room.getTop(), room.getBottom());
             let location = {type: 'map', x, y};
             if (!world.entities.findAny({location})) {
-                if (randint(0, 9) < 7) {
+                let itemChance = randint(0, 9);
+                if (itemChance < 7) {
                     world.entities.create('health_potion', {location});
+                } else if (itemChance < 9) {
+                    world.entities.create('confusion_scroll', {location});
                 } else {
                     world.entities.create('lightning_potion', {location});
                 }
@@ -230,7 +234,7 @@ function checkForDeath(actor) {
     }
 }
 
-function handleConsumable(entity) {
+async function handleConsumable(entity) {
     switch (entity.consumable.type) {
         case 'heal': {
             let amountRecovered = adjustHealth(world.player, entity.consumable.amount);
@@ -239,7 +243,7 @@ function handleConsumable(entity) {
                 return false;
             }
             entity.location = {type: 'void'}; // where all used-up things go
-            print `You consume the ${entity.type}, and recover ${amountRecovered} hp!`;
+            print `You consume the ${entity}, and recover ${amountRecovered} hp!`;
             return true;
         }
         case 'lightning': {
@@ -255,9 +259,29 @@ function handleConsumable(entity) {
                 return false;
             }
             let damaged = adjustHealth(closest.target, -entity.consumable.damage);
-            print `A lightning bolt strikes the ${closest.target.type} with a loud thunder, for ${damaged} damage!`;
+            print `A lightning bolt strikes the ${closest.target} with a loud thunder, for ${damaged} damage!`;
             entity.location = {type: 'void'};
             checkForDeath(closest.target);
+            return true;
+        }
+        case 'confusion': {
+            print `Select a target location.`;
+            let position = await handleOverlayChooseEnemy.waitForAnswer();
+            if (!position) return false; // cancelled
+
+            let tile = world.tiles.findAny({position});
+            if (tile.light === 0.0) {
+                print `You cannot target an area that you cannot see.`;
+                return false;
+            }
+            let target = world.entities.findAny({ai: Table.ANY, location: {type: 'map', x: position.x, y: position.y}});
+            if (!target) {
+                print `You must select an enemy to target`;
+                return false;
+            }
+
+            print `The eyes of the ${target} look vacant, as it starts to stumble around!`;
+            target.ai.unshift({type: 'confused', turns: entity.consumable.turns});
             return true;
         }
     }
@@ -286,8 +310,28 @@ function distanceBetween(p, q) {
 function handleAi(enemy) {
     const MIN_VISIBILITY = 0.2;
     if (enemy.ai === undefined) return;
-    switch (enemy.ai[0]) {
-        case 'hostile':
+    switch (enemy.ai[0].type) {
+        case 'confused': {
+            if (enemy.ai[0].turns <= 0) {
+                print `The ${enemy.type} is no longer confused.`;
+                enemy.ai.shift();
+            } else {
+                // Pick a random direction
+                let [dx, dy] = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]][randint(0, 7)];
+                enemy.ai[0].turns -= 1;
+                let location = {type: 'map', x: enemy.location.x + dx, y: enemy.location.y + dy};
+                let entity = world.entities.findAny({location});
+                if (entity === world.player) { // walked into the player
+                    handleCombat(enemy, entity);
+                } else if (entity?.blocksMovement) { // walked into an object/enemy
+                } else if (world.tiles.findAny({walkable: true, position: {x: location.x, y: location.y}})) { // move to an open tile
+                    enemy.location = location;
+                } else { // walked into a wall
+                }
+            }
+            break;
+        }
+        case 'hostile': {
             // Make sure we're on the map
             if (enemy.location.type !== 'map') return;
 
@@ -319,7 +363,10 @@ function handleAi(enemy) {
                 // Move to a tile closer to the player
                 enemy.location = {type: 'map', x: closestNeighbor.position.x, y: closestNeighbor.position.y};
             }
-            return;
+            break;
+        }
+        default:
+            throw `Unknown enemy ai ${JSON.stringify(enemy.ai[0])}`;
     }
 }
 
