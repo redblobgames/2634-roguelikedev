@@ -17,6 +17,7 @@ const randint = RNG.getUniformInt.bind(RNG);
  *
  * @typedef {
        {type: 'move', dx: number, dy: number}
+     | {type: 'get'}
      | {type: 'wait'}
      | {type: 'none'}
    } Action
@@ -62,6 +63,7 @@ function keyToAction(event) {
         ArrowDown:  {type: 'move', dx:  0, dy: +1},
         PageDown:   {type: 'move', dx: +1, dy: +1},
         ['.']:      {type: 'wait'},
+        g:          {type: 'get'},
     };
 
     let key = REMAP_NUMPAD[event.code] ?? event.key;
@@ -89,14 +91,18 @@ let components = {
 /**
  * Stores information about the entire game world
  */
-let world = {
-    entities: new Table('Entities', ['location', 'hp'],
+let world; // HACK: circular dependency workaround
+world = {
+    entities: new Table('Entities', ['location', 'hp', 'inventory'],
         {
-            player: {shape: "@", fg: "hsl(60 100% 50%)", renderOrder: 1, blocksMovement: false, ...components.fighter(30, 2, 5)},
+            player: {
+                shape: "@", fg: "hsl(60 100% 50%)", renderOrder: 1, blocksMovement: false, ...components.fighter(30, 2, 5),
+                get inventory() { return world && world.entities.findAll({location: {type: 'held', by: world.player.id}}); },
+            },
             corpse: {shape: "%", fg: "hsl(  0 20% 50%)", renderOrder: 9, blocksMovement: false},
             troll:  {shape: "T", fg: "hsl(120 60% 50%)", renderOrder: 2, ...components.enemy(10, 0, 3)},
             orc:    {shape: "o", fg: "hsl(100 30% 50%)", renderOrder: 2, ...components.enemy(16, 1, 4)},
-            health_potion: {shape: "!", fg: "rgb(127 0 255)", renderOrder: 3, consumable: {type: 'heal', amount: 4}},
+            health_potion: {shape: "!", fg: "rgb(127 0 255)", renderOrder: 3, ...components.holdable(), consumable: {type: 'heal', amount: 4}},
         }
     ),
     tiles: new Table('Tiles', ['position', 'light', 'maxLight'],
@@ -192,7 +198,22 @@ function handlePlayerAction(action) {
     switch (action.type) {
         case 'wait':
             return true;
-        case 'move':
+        case 'get': {
+            let candidates = world.entities.findAll({holdable: true, location: {type: 'map', x: world.player.location.x, y: world.player.location.y}});
+            if (world.player.inventory.length >= 26) {
+                print `You are holding too much.`;
+                return false;
+            }
+            if (candidates.length === 0) {
+                print `There is nothing here to pick up.`;
+                return false;
+            }
+            let entity = candidates[0];
+            entity.location = {type: 'held', by: world.player.id};
+            print `You pick up ${entity}.`;
+            return true;
+        }
+        case 'move': {
             let newX = world.player.location.x + action.dx;
             let newY = world.player.location.y + action.dy;
             let tile = world.tiles.findAny({walkable: true, position: {x: newX, y: newY}});
@@ -209,6 +230,7 @@ function handlePlayerAction(action) {
                 world.player.location = {type: 'map', x: newX, y: newY};
                 return true;
             }
+        }
     }
 
     throw `Unknown action: ${JSON.stringify(action)}`;
