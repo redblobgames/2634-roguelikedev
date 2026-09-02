@@ -60,6 +60,7 @@ export function setupInputHandlers(worldGlobal) {
      | {type: 'get'}
      | {type: 'wait'}
      | {type: 'item'}
+     | {type: 'drop'}
      | {type: 'none'}
    } Action
  *
@@ -106,6 +107,7 @@ function keyToAction(event) {
         ['.']:      {type: 'wait'},
         g:          {type: 'get'},
         i:          {type: 'item'},
+        d:          {type: 'drop'},
     };
 
     let key = REMAP_NUMPAD[event.code] ?? event.key;
@@ -391,6 +393,7 @@ export function showTemporaryMessage(text) {
 /* Event handlers */
 
 function currentEventHandler() {
+    if (handleOverlayDrop.visible) return handleOverlayDrop;
     if (handleOverlayInventory.visible) return handleOverlayInventory;
     if (world.player.hp === 0) return handlePlayerDead;
     else return handleGameMap;
@@ -429,45 +432,59 @@ const handleGameMap = {
     }
 };
 
-export let handleOverlayInventory = {
-    el: document.querySelector("#inventory-use"),
-    _waiting: null,
-    get visible() { return this._waiting !== null; },
-    waitForAnswer() {
-        return new Promise((resolve) => {
-            this.el.classList.add('visible');
-            this._waiting = {resolve, keys: this.draw()};
-        });
-    },
-    handleKeyDown(event) {
-        if (event.key === 'Escape' || this._waiting.keys.has(event.key.toUpperCase())) {
-            let waiting = this._waiting;
-            let answer = event.key === 'Escape'? null : waiting.keys.get(event.key.toUpperCase());
-            event.preventDefault();
-            this.el.classList.remove('visible');
-            this._waiting = null;
-            waiting.resolve(answer);
-        }
-    },
-    draw() {
-        let keys = new Map();
-        let html = ``;
-        let consumables = world.player.inventory.filter((entity) => entity.consumable);
-        if (world.player.inventory.length === 0) {
-            html = `<div>Your inventory is empty. Press <kbd>ESC</kbd> to cancel.</div>${html}`;
-        } else if (consumables.length === 0) {
-            html = `<div>You have nothing you can use. Press <kbd>ESC</kbd> to cancel.</div>${html}`;
-        } else {
-            html = `<ul>`;
-            consumables.forEach((entity, i) => {
-                let key = String.fromCharCode(65 + i);
-                keys.set(key, entity);
-                html += `<li><kbd>${key}</kbd> ${entity.type}.${entity.id}</li>`;
+function makeInventoryPicker({el, action, filter}) {
+    return {
+        el: document.querySelector(el),
+        _waiting: null,
+        get visible() { return this._waiting !== null; },
+        waitForAnswer() {
+            return new Promise((resolve) => {
+                this.el.classList.add('visible');
+                this._waiting = {resolve, keys: this.draw()};
             });
-            html += `</ul>`;
-            html = `<div>Select an item to use it, or <kbd>ESC</kbd> to cancel.</div>${html}`;
-        }
-        this.el.innerHTML = html;
-        return keys;
-    },
-};
+        },
+        handleKeyDown(event) {
+            if (event.key === 'Escape' || this._waiting.keys.has(event.key.toUpperCase())) {
+                let waiting = this._waiting;
+                let answer = event.key === 'Escape'? null : waiting.keys.get(event.key.toUpperCase());
+                event.preventDefault();
+                this.el.classList.remove('visible');
+                this._waiting = null;
+                waiting.resolve(answer);
+            }
+        },
+        draw() {
+            let keys = new Map();
+            let html = ``;
+            let entities = filter(world.player.inventory)
+            if (world.player.inventory.length === 0) {
+                html = `<div>Your inventory is empty. Press <kbd>ESC</kbd> to cancel.</div>${html}`;
+            } else if (entities.length === 0) {
+                html = `<div>You have nothing you can ${action}. Press <kbd>ESC</kbd> to cancel.</div>${html}`;
+            } else {
+                html = `<ul>`;
+                entities.forEach((entity, i) => {
+                    let key = String.fromCharCode(65 + i);
+                    keys.set(key, entity);
+                    html += `<li><kbd>${key}</kbd> ${entity.type}.${entity.id}</li>`;
+                });
+                html += `</ul>`;
+                html = `<div>Select an item to ${action} it, or <kbd>ESC</kbd> to cancel.</div>${html}`;
+            }
+            this.el.innerHTML = html;
+            return keys;
+        },
+    };
+}
+
+export let handleOverlayInventory = makeInventoryPicker({
+    el: "#inventory-use",
+    action: "use",
+    filter: (entities) => entities.filter((entity) => entity.consumable),
+});
+
+export let handleOverlayDrop = makeInventoryPicker({
+    el: "#inventory-drop",
+    action: "drop",
+    filter: (entities) => entities,
+});

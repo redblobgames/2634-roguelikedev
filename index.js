@@ -7,7 +7,7 @@
 
 import { RNG, Map as RotMap, FOV } from "./third-party/rotjs/index.js";
 import { Table } from "./table.js";
-import { print, screenSize, drawAll, handleOverlayInventory, setupInputHandlers } from "./interface.js";
+import { print, screenSize, drawAll, handleOverlayInventory, handleOverlayDrop, setupInputHandlers } from "./interface.js";
 
 /**
  * @import { Action } from "./interface.js"
@@ -108,6 +108,15 @@ world = {
                         return true;
                 }
                 throw `Unknown consumable type ${entity.consumable.type}`;
+            }
+            case 'drop': {
+                let entity = await handleOverlayDrop.waitForAnswer();
+                if (entity === null) {
+                    return false; // action cancelled
+                }
+                entity.location = {type: 'map', x: world.player.location.x, y: world.player.location.y};
+                print `You dropped the ${entity.type}.`;
+                return true;
             }
             case 'move': {
                 let newX = world.player.location.x + action.dx;
