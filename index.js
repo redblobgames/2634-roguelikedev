@@ -48,6 +48,7 @@ world = {
             troll:  {shape: "T", fg: "hsl(120 60% 50%)", renderOrder: 2, ...components.enemy(10, 0, 3)},
             orc:    {shape: "o", fg: "hsl(100 30% 50%)", renderOrder: 2, ...components.enemy(16, 1, 4)},
             health_potion: {shape: "!", fg: "rgb(127 0 255)", renderOrder: 3, ...components.holdable(), consumable: {type: 'heal', amount: 4}},
+            lightning_potion: {shape: "~", fg: "rgb(255 255 0)", renderOrder: 3, ...components.holdable(), consumable: {type: 'lightning', damage: 20, range: 5}},
         }
     ),
     tiles: new Table('Tiles', ['position', 'light', 'maxLight'],
@@ -95,19 +96,7 @@ world = {
                 if (entity === null) {
                     return false; // action cancelled
                 }
-                switch (entity.consumable.type) {
-                    case 'heal':
-                        if (world.player.hp >= world.player.fighter.maxHp) {
-                            print `Your health is already full.`;
-                            return false;
-                        }
-                        let amountRecovered = Math.min(entity.consumable.amount, world.player.fighter.maxHp - world.player.hp);
-                        entity.location = {type: 'void'}; // where all used-up things go
-                        world.player.hp += amountRecovered;
-                        print `You consume the ${entity.type}, and recover ${amountRecovered} hp!`;
-                        return true;
-                }
-                throw `Unknown consumable type ${entity.consumable.type}`;
+                return handleConsumable(entity);
             }
             case 'drop': {
                 let entity = await handleOverlayDrop.waitForAnswer();
@@ -191,31 +180,85 @@ function generateDungeon() {
                 y = randint(room.getTop(), room.getBottom());
             let location = {type: 'map', x, y};
             if (!world.entities.findAny({location})) {
-                world.entities.create('health_potion', {location});
+                if (randint(0, 9) < 7) {
+                    world.entities.create('health_potion', {location});
+                } else {
+                    world.entities.create('lightning_potion', {location});
+                }
             }
         }
     }
 }
 
 /**
- * Combat
+ * Actions
  */
+
+/**
+ * @param {object} entity
+ * @param {number} by - can be positive or negative
+ * @returns {number} how much hp actually changed
+ */
+function adjustHealth(entity, by) {
+    const maxHp = entity.fighter?.maxHp;
+    let newHealth = entity.hp + by;
+    if (newHealth < 0) newHealth = 0;
+    if (newHealth > maxHp) newHealth = maxHp;
+    let change = entity.hp - newHealth;
+    entity.hp = newHealth;
+    return change;
+}
+
 function handleCombat(attacker, defender) {
-    let damage = attacker.fighter.attack - defender.fighter.defense;
-    if (damage > 0) {
-        defender.hp = Math.max(0, defender.hp - damage);
-        // TODO: want to check hp in other places because there could be other reasons it died
-        print `${attacker} attacks ${defender} for ${damage} hp.`;
+    let damaged = adjustHealth(defender, -(attacker.fighter.attack - defender.fighter.defense));
+    if (damaged > 0) {
+        print `${attacker} attacks ${defender} for ${damaged} hp.`;
     } else {
         print `${attacker} attacks ${defender} but does no damage.`;
     }
-    if (defender.hp === 0) handleDeath(defender);
+    checkForDeath(defender);
 }
 
-function handleDeath(actor) {
-    print `${actor} is dead!`;
-    actor.type = 'corpse';
-    actor.ai = undefined;
+function checkForDeath(actor) {
+    if (actor.hp === 0) {
+        print `${actor} is dead!`;
+        actor.type = 'corpse';
+        actor.ai = undefined;
+    }
+}
+
+function handleConsumable(entity) {
+    switch (entity.consumable.type) {
+        case 'heal': {
+            let amountRecovered = adjustHealth(world.player, entity.consumable.amount);
+            if (amountRecovered === 0) {
+                print `Your health is already full.`;
+                return false;
+            }
+            entity.location = {type: 'void'}; // where all used-up things go
+            print `You consume the ${entity.type}, and recover ${amountRecovered} hp!`;
+            return true;
+        }
+        case 'lightning': {
+            let closest = {target: null, distance: entity.consumable.range + 1};
+            for (let target of world.entities.findAll({fighter: Table.ANY})) {
+                if (target === world.player) continue;
+                if (target.location.type !== 'map') continue;
+                let distance = Math.hypot(target.location.x - world.player.location.x, target.location.y - world.player.location.y);
+                if (distance < closest.distance) closest = {target, distance};
+            }
+            if (!closest.target) {
+                print `No enemy is close enough to strike.`
+                return false;
+            }
+            let damaged = adjustHealth(closest.target, -entity.consumable.damage);
+            print `A lightning bolt strikes the ${closest.target.type} with a loud thunder, for ${damaged} damage!`;
+            entity.location = {type: 'void'};
+            checkForDeath(closest.target);
+            return true;
+        }
+    }
+    throw `Unknown consumable type ${entity.consumable.type}`;
 }
 
 function walkableTilesAdjacentTo(tile) {

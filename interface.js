@@ -404,12 +404,12 @@ const handlePlayerDead = {
 }
 
 const handleGameMap = {
-    handleKeyDown(event) {
+    async handleKeyDown(event) {
         let action = keyToAction(event);
         if (action.type === 'none') return;
 
         event.preventDefault();
-        if (world.handlePlayerAction(action)) {
+        if (await world.handlePlayerAction(action)) {
             world.nextTurn();
         }
     },
