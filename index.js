@@ -7,70 +7,14 @@
 
 import { RNG, Map as RotMap, FOV } from "./third-party/rotjs/index.js";
 import { Table } from "./table.js";
-import { print, screenSize, drawWorld, drawTable, drawMessages, setupInputHandlers } from "./interface.js";
+import { print, screenSize, drawAll, setupInputHandlers } from "./interface.js";
+
+/**
+ * @import { Action } from "./interface.js"
+ */
 
 RNG.setSeed(1234);
 const randint = RNG.getUniformInt.bind(RNG);
-
-/**
- * Determine which action occurs when a key is pressed.
- *
- * @typedef {
-       {type: 'move', dx: number, dy: number}
-     | {type: 'get'}
-     | {type: 'wait'}
-     | {type: 'none'}
-   } Action
- *
- * @param {KeyboardEvent} event
- * @returns {Action}
- */
-function keyToAction(event) {
-    // I want to be able to use the numpad whether NumLock is off or
-    // on. That requires using event.code.
-    const REMAP_NUMPAD = {
-        Numpad7: 'Home',
-        Numpad8: 'ArrowUp',
-        Numpad9: 'PageUp',
-        Numpad4: 'ArrowLeft',
-        Numpad5: '.',
-        Numpad6: 'ArrowRight',
-        Numpad1: 'End',
-        Numpad2: 'ArrowDown',
-        Numpad3: 'PageDown',
-    }
-    // But for the other keys I want to use event.key, because it
-    // honors the current layout.
-    const REMAP_VI_KEYS = {
-        h: 'ArrowLeft',
-        j: 'ArrowDown',
-        k: 'ArrowUp',
-        l: 'ArrowRight',
-        y: 'Home',
-        u: 'PageUp',
-        b: 'End',
-        n: 'PageDown',
-    };
-    // The main keybindings are using event.key
-    /** @type{Record<string, Action>} */
-    const KEYMAP = {
-        Home:       {type: 'move', dx: -1, dy: -1},
-        ArrowUp:    {type: 'move', dx:  0, dy: -1},
-        PageUp:     {type: 'move', dx: +1, dy: -1},
-        ArrowLeft:  {type: 'move', dx: -1, dy:  0},
-        ArrowRight: {type: 'move', dx: +1, dy:  0},
-        End:        {type: 'move', dx: -1, dy: +1},
-        ArrowDown:  {type: 'move', dx:  0, dy: +1},
-        PageDown:   {type: 'move', dx: +1, dy: +1},
-        ['.']:      {type: 'wait'},
-        g:          {type: 'get'},
-    };
-
-    let key = REMAP_NUMPAD[event.code] ?? event.key;
-    key = REMAP_VI_KEYS[key] ?? key;
-    return KEYMAP[key] ?? {type: 'none'};
-}
-
 
 /**
  * These are factory functions to construct commonly used groups of
@@ -112,6 +56,62 @@ world = {
         }
     ),
     player: null,
+    fov: new FOV.PreciseShadowcasting((x, y) => world.tiles.findAny({position: {x, y}})?.transparent),
+    nextTurn() {
+        // let enemies move
+        for (let entity of world.entities.findAll({ai: Table.ANY})) {
+            handleAi(entity);
+        }
+        drawAll();
+    },
+
+    /**
+     * Attempt to run the action
+     * @param {Action} action
+     * @returns {boolean} - true if the turn ends
+     */
+    handlePlayerAction(action) {
+        switch (action.type) {
+            case 'wait':
+                return true;
+            case 'get': {
+                let candidates = world.entities.findAll({holdable: true, location: {type: 'map', x: world.player.location.x, y: world.player.location.y}});
+                if (world.player.inventory.length >= 26) {
+                    print `You are holding too much.`;
+                    return false;
+                }
+                if (candidates.length === 0) {
+                    print `There is nothing here to pick up.`;
+                    return false;
+                }
+                let entity = candidates[0];
+                entity.location = {type: 'held', by: world.player.id};
+                print `You pick up ${entity}.`;
+                return true;
+            }
+            case 'move': {
+                let newX = world.player.location.x + action.dx;
+                let newY = world.player.location.y + action.dy;
+                let tile = world.tiles.findAny({walkable: true, position: {x: newX, y: newY}});
+                if (!tile) return false;
+
+                let blockingEntity = world.entities.findAny({blocksMovement: true, location: {type: 'map', x: newX, y: newY}});
+                if (blockingEntity?.fighter) {
+                    handleCombat(world.player, blockingEntity);
+                    return true;
+                } else if (blockingEntity) {
+                    console.log(`You cannot walk through ${blockingEntity.type}.`);
+                    return false;
+                } else {
+                    world.player.location = {type: 'map', x: newX, y: newY};
+                    return true;
+                }
+            }
+        }
+
+        throw `Unknown action: ${JSON.stringify(action)}`;
+    },
+
 };
 
 function generateDungeon() {
@@ -189,53 +189,6 @@ function handleDeath(actor) {
     actor.ai = undefined;
 }
 
-/**
- * Attempt to run the action
- * @param {Action} action
- * @returns {boolean} - true if the turn ends
- */
-function handlePlayerAction(action) {
-    switch (action.type) {
-        case 'wait':
-            return true;
-        case 'get': {
-            let candidates = world.entities.findAll({holdable: true, location: {type: 'map', x: world.player.location.x, y: world.player.location.y}});
-            if (world.player.inventory.length >= 26) {
-                print `You are holding too much.`;
-                return false;
-            }
-            if (candidates.length === 0) {
-                print `There is nothing here to pick up.`;
-                return false;
-            }
-            let entity = candidates[0];
-            entity.location = {type: 'held', by: world.player.id};
-            print `You pick up ${entity}.`;
-            return true;
-        }
-        case 'move': {
-            let newX = world.player.location.x + action.dx;
-            let newY = world.player.location.y + action.dy;
-            let tile = world.tiles.findAny({walkable: true, position: {x: newX, y: newY}});
-            if (!tile) return false;
-
-            let blockingEntity = world.entities.findAny({blocksMovement: true, location: {type: 'map', x: newX, y: newY}});
-            if (blockingEntity?.fighter) {
-                handleCombat(world.player, blockingEntity);
-                return true;
-            } else if (blockingEntity) {
-                console.log(`You cannot walk through ${blockingEntity.type}.`);
-                return false;
-            } else {
-                world.player.location = {type: 'map', x: newX, y: newY};
-                return true;
-            }
-        }
-    }
-
-    throw `Unknown action: ${JSON.stringify(action)}`;
-}
-
 function walkableTilesAdjacentTo(tile) {
     let results = [];
     for (let [dx, dy] of [[+1, 0], [-1, 0], [0, +1], [0, -1], [-1, -1], [-1, +1], [+1, -1], [+1, +1]]) {
@@ -295,57 +248,7 @@ function handleAi(enemy) {
     }
 }
 
-/**
- * @param {KeyboardEvent} event
- */
-function handleKeyDown(event) {
-    function playerDeadState() {
-        // The player is dead and can't move around anymore. This is a
-        // placeholder until I work on the UI and can display a "game
-        // over" message, as well as "new game"
-        return;
-    }
 
-    function playerAliveState() {
-        let action = keyToAction(event);
-
-        // Only preventDefault if we handled the event; otherwise we want
-        // the default browser behavior
-        if (action.type === 'none') return;
-        event.preventDefault();
-
-        if (handlePlayerAction(action)) {
-            // let enemies move
-            for (let entity of world.entities.findAll({ai: Table.ANY})) {
-                handleAi(entity);
-            }
-            drawAll();
-        }
-    }
-
-    if (world.player.hp === 0) return playerDeadState()
-    else return playerAliveState();
-}
-
-const fov = new FOV.PreciseShadowcasting((x, y) => world.tiles.findAny({position: {x, y}})?.transparent);
-
-function drawAll() {
-    for (let tile of world.tiles.rows) {
-        tile.light = 0;
-    }
-    fov.compute(world.player.location.x, world.player.location.y, 10,
-        (x, y, r, light) => {
-        let tile = world.tiles.findAny({position: {x, y}});
-        if (tile) {
-            tile.light = light;
-            tile.maxLight = Math.max(tile.maxLight, light);
-        }
-    });
-    drawWorld(world);
-    drawTable(world.entities);
-    drawMessages();
-}
-
-setupInputHandlers(world, handleKeyDown, drawAll);
+setupInputHandlers(world);
 generateDungeon();
 drawAll();

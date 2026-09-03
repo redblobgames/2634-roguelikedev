@@ -30,21 +30,18 @@ const display = new Display({
     fontSize: 18,
 });
 
-let drawAll;
 /** @type{any} */
 let world = {}; // circular I know but … haven't found a better way
 
-export function setupInputHandlers(worldGlobal, handleKeyDown, drawAllGlobal) {
+export function setupInputHandlers(worldGlobal) {
     world = worldGlobal;
-    drawAll = drawAllGlobal;
     const canvas = /** @type{HTMLCanvasElement} */(display.getContainer());
     document.querySelector("#game").append(canvas);
 
     canvas.setAttribute('tabindex', "1");
-    canvas.addEventListener('keydown', handleKeyDown);
-
-    canvas.addEventListener('mousemove', handleMousemove);
-    canvas.addEventListener('mouseout', handleMouseout);
+    canvas.addEventListener('keydown', (event) => currentEventHandler().handleKeyDown?.(event));
+    canvas.addEventListener('mousemove', (event) => currentEventHandler().handleMousemove?.(event));
+    canvas.addEventListener('mouseout', (event) => currentEventHandler().handleMouseout?.(event));
 
     const onBlur= () => focusReminder.classList.toggle('visible', true);
     const onFocus = () => focusReminder.classList.toggle('visible', false);
@@ -55,25 +52,64 @@ export function setupInputHandlers(worldGlobal, handleKeyDown, drawAllGlobal) {
     if (document.hasFocus() && document.activeElement === canvas) onFocus(); else onBlur();
 }
 
-function handleMousemove(event) {
-    let [x, y] = display.eventToPosition(event); // returns -1, -1 for out of bounds
-    let tile = world.tiles.findAny({position: {x, y}});
-    let text = "";
-    if (tile && tile.light >= 0.2) {
-        let entities = world.entities
-            .findAll({location: {type: 'map', x, y}})
-            .toSorted((a, b) => b.renderOrder - a.renderOrder);
-        text = entities.map(e => e.type + " " + e.id).join("\n");
+/**
+ * Determine which action occurs when a key is pressed.
+ *
+ * @typedef {
+       {type: 'move', dx: number, dy: number}
+     | {type: 'get'}
+     | {type: 'wait'}
+     | {type: 'none'}
+   } Action
+ *
+ * @param {KeyboardEvent} event
+ * @returns {Action}
+ */
+function keyToAction(event) {
+    // I want to be able to use the numpad whether NumLock is off or
+    // on. That requires using event.code.
+    const REMAP_NUMPAD = {
+        Numpad7: 'Home',
+        Numpad8: 'ArrowUp',
+        Numpad9: 'PageUp',
+        Numpad4: 'ArrowLeft',
+        Numpad5: '.',
+        Numpad6: 'ArrowRight',
+        Numpad1: 'End',
+        Numpad2: 'ArrowDown',
+        Numpad3: 'PageDown',
     }
-    showTemporaryMessage(text);
+    // But for the other keys I want to use event.key, because it
+    // honors the current layout.
+    const REMAP_VI_KEYS = {
+        h: 'ArrowLeft',
+        j: 'ArrowDown',
+        k: 'ArrowUp',
+        l: 'ArrowRight',
+        y: 'Home',
+        u: 'PageUp',
+        b: 'End',
+        n: 'PageDown',
+    };
+    // The main keybindings are using event.key
+    /** @type{Record<string, Action>} */
+    const KEYMAP = {
+        Home:       {type: 'move', dx: -1, dy: -1},
+        ArrowUp:    {type: 'move', dx:  0, dy: -1},
+        PageUp:     {type: 'move', dx: +1, dy: -1},
+        ArrowLeft:  {type: 'move', dx: -1, dy:  0},
+        ArrowRight: {type: 'move', dx: +1, dy:  0},
+        End:        {type: 'move', dx: -1, dy: +1},
+        ArrowDown:  {type: 'move', dx:  0, dy: +1},
+        PageDown:   {type: 'move', dx: +1, dy: +1},
+        ['.']:      {type: 'wait'},
+        g:          {type: 'get'},
+    };
+
+    let key = REMAP_NUMPAD[event.code] ?? event.key;
+    key = REMAP_VI_KEYS[key] ?? key;
+    return KEYMAP[key] ?? {type: 'none'};
 }
-
-function handleMouseout(event) {
-    showTemporaryMessage("");
-}
-
-
-
 
 const BG_COLOR = {
     shroud: [0, 0, 0],
@@ -272,6 +308,23 @@ export function drawTable(table) {
     drawTableVnode = snabbdomPatch(drawTableVnode, h("div#world-entities", vnodeTable));
 }
 
+export function drawAll() {
+    for (let tile of world.tiles.rows) {
+        tile.light = 0;
+    }
+    world.fov.compute(world.player.location.x, world.player.location.y, 10,
+        (x, y, r, light) => {
+        let tile = world.tiles.findAny({position: {x, y}});
+        if (tile) {
+            tile.light = light;
+            tile.maxLight = Math.max(tile.maxLight, light);
+        }
+    });
+    drawWorld(world);
+    drawTable(world.entities);
+    drawMessages();
+}
+
 
 const MAX_MESSAGE_LINES = 100;
 /** @type{Array<Array<[snabbdom.VNodeData | null, snabbdom.VNodeChildren]>>} */
@@ -329,3 +382,43 @@ export function showTemporaryMessage(text) {
     area.textContent = text;
     area.classList.toggle('visible', !!text);
 }
+
+/* Event handlers */
+
+function currentEventHandler() {
+    if (world.player.hp === 0) return handlePlayerDead;
+    else return handleGameMap;
+
+}
+
+const handlePlayerDead = {
+}
+
+const handleGameMap = {
+    handleKeyDown(event) {
+        let action = keyToAction(event);
+        if (action.type === 'none') return;
+
+        event.preventDefault();
+        if (world.handlePlayerAction(action)) {
+            world.nextTurn();
+        }
+    },
+
+    handleMousemove(event) {
+        let [x, y] = display.eventToPosition(event); // returns -1, -1 for out of bounds
+        let tile = world.tiles.findAny({position: {x, y}});
+        let text = "";
+        if (tile && tile.light >= 0.2) {
+            let entities = world.entities
+                .findAll({location: {type: 'map', x, y}})
+                .toSorted((a, b) => b.renderOrder - a.renderOrder);
+            text = entities.map(e => e.type + " " + e.id).join("\n");
+        }
+        showTemporaryMessage(text);
+    },
+
+    handleMouseout(event) {
+        showTemporaryMessage("");
+    }
+};
