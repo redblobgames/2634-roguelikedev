@@ -57,7 +57,6 @@ export class Table {
             Object.setPrototypeOf(prototype, this.object);
             for (let column of Object.keys(prototype)) {
                 this.prototypeColumns.add(column);
-                Object.freeze(prototype[column]);
             }
         }
         this._highestId = 0;
