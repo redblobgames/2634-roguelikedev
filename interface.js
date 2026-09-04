@@ -105,14 +105,14 @@ function getDirectionFromKey(event) {
  * Determine which action occurs when a key is pressed.
  *
  * @typedef {
-       {type: 'move', dx: number, dy: number}
-     | {type: 'get'}
-     | {type: 'wait'}
-     | {type: 'item'}
-     | {type: 'drop'}
-     | {type: 'look'}
-     | {type: 'none'}
-   } Action
+   {type: 'move', dx: number, dy: number}
+   | {type: 'get'}
+   | {type: 'wait'}
+   | {type: 'item'}
+   | {type: 'drop'}
+   | {type: 'look'}
+   | {type: 'none'}
+     } Action
  *
  * @param {KeyboardEvent} event
  * @returns {Action}
@@ -201,92 +201,174 @@ export function drawTable(table) {
     const {h} = snabbdom;
     const types = Object.keys(table.readonlyPrototypes);
 
-    function formatValue(object, column, value) {
-        if (value === undefined) return "";
-        switch (column) {
-            case 'location':
-                let formatted = value.type === 'map'? `map ${value.x},${value.y}` : value.type === 'held' ? `held by ${value.by}` : `void`;
-                return h('span',
-                    h('input', {
-                        attrs: {type: 'text', required: true},
-                        props: {value: formatted, pattern: "(map \\d+,\\d+|held by \\d+|void)"},
-                        on: {
-                            input: (e) => {
-                                const target = /** @type{HTMLInputElement} */(e.target);
-                                target.setCustomValidity("");
-                                if (!target.checkValidity()) {
-                                    target.setCustomValidity("Enter [map $x,$y] OR [held by $id] OR [void]");
-                                } else {
-                                    let words = target.value.split(" ");
-                                    switch (words[0]) {
-                                        case 'map':
-                                            let [x, y] = words[1].split(",").map((word) => parseInt(word));
-                                            if (!world.tiles.findAny({walkable: true, position: {x, y}})) {
-                                                target.setCustomValidity("Not a walkable tile");
-                                            } else {
-                                                object.location = {type: 'map', x, y};
-                                                drawAll();
-                                            }
-                                            break;
-                                        case 'held':
-                                            let id = parseInt(words[2]);
-                                            if (!world.entities.findAny({id, inventory: Table.ANY})) {
-                                                target.setCustomValidity("Not an entity that has an inventory");
-                                            } else {
-                                                object.location = {type: 'held', by: id};
-                                                drawAll();
-                                            }
-                                            break;
-                                        case 'void':
-                                            object.location = {type: 'void'};
-                                            drawAll();
-                                    }
-                                }
-                                target.reportValidity();
-                            },
-                        },
-                    }),
-                );
-            case 'fg': return h('input', {
-                attrs: {type: "color"},
-                props: {value},
+    function editType(object) {
+        if (!object.id) return object.type; // it's a prototype, so this isn't editable
+        return h('select',
+            {
+                on: {
+                    change: (e) => {
+                        const target = /** @type{HTMLSelectElement} */(e.target);
+                        if (!target.checkValidity()) return;
+                        object.type = target.value;
+                        drawAll();
+                    }
+                }
+            },
+            Object.keys(world.entities.readonlyPrototypes)
+                .map((value) =>
+                    h('option', {props: {value, selected: object.type === value? true : undefined}}, value))
+        );
+    }
+
+    function editShape(object, value) {
+        return h('input', {
+            attrs: {type: 'text', required: true, maxlength: 1},
+            props: {value},
+            on: {
+                input: (e) => {
+                    const target = /** @type{HTMLInputElement} */(e.target);
+                    if (!target.checkValidity()) return;
+                    object.shape = target.value;
+                    drawAll();
+                },
+            }
+        });
+    }
+
+    function editBoolean(object, field) {
+        return h('input', {
+                attrs: {type: 'checkbox'},
+                props: {checked: object[field]},
                 on: {
                     input: (e) => {
                         const target = /** @type{HTMLInputElement} */(e.target);
-                        object.fg = target.value;
+                        object[field] = target.checked;
                         drawAll();
                     }
                 },
             });
-            case 'ai': return value.map((ai) =>
-                "{" + Object.entries(ai).map(([k, v]) => `${k}: ${v}`).join(", ") + "}"
-            ).join(" ");
-            case 'id': return value;
-            case 'type': return value;
-            case 'renderOrder': return value;
-            case 'inventory': return value.map(entity => `${entity.type}.${entity.id}`).join(", ");
-            case 'hp': return h('input', {
-                attrs: {type: 'number', required: true, min: 0, max: object.fighter?.maxHp ?? 0},
-                props: {value},
+    }
+
+    function editNumber(object, field) {
+        return h('input', {
+                attrs: {type: 'number', required: true, min: 0},
+                props: {value: object[field]},
                 on: {
                     input: (e) => {
                         const target = /** @type{HTMLInputElement} */(e.target);
                         if (!target.checkValidity()) return;
-                        object.hp = target.valueAsNumber;
+                        object[field] = target.valueAsNumber;
                         drawAll();
                     }
                 },
             });
+    }
+    function editNumberWithLabel(object, field) {
+        return h('label', [field, ":", editNumber(object, field)]);
+    }
+
+    function editColor(object, value) {
+        return h('input', {
+            attrs: {type: "color"},
+            props: {value, maxlength: 1, pattern: "."},
+            on: {
+                input: (e) => {
+                    const target = /** @type{HTMLInputElement} */(e.target);
+                    object.fg = target.value;
+                    drawAll();
+                }
+            },
+        });
+    }
+
+    function editAi(object, value) {
+        // This is tricky because do we allow changing the type? do we allow deleting/adding entries?
+        // We could allow editing the text freely like the location editor, but for now let's only
+        // allow editing the numeric values
+        let children = [];
+        for (let i = 0; i < value.length; i++) {
+            let ai = value[i];
+            if (i > 0) children.push(", ");
+            children.push(h('span', [
+                ai.type,
+                ...Object.entries(ai).map(([k, v]) =>
+                    k === 'type'? "" : h('span', [" ", k, ":", editNumber(ai, k)])
+                )
+            ]));
         }
-        if (value === null) return "(null)";
-        if (Array.isArray(value)) return JSON.stringify(value);
-        if (typeof value === 'object') {
-            // TODO: we could make the strings and numbers editable here
-            return Object.entries(value)
-                .map(([k, v]) => `${k}: ${JSON.stringify(v)}`)
-                .join(", ");
+        return h('span', children);
+    }
+
+    function editLocation(object, value) {
+        let formatted = value.type === 'map'? `map ${value.x},${value.y}` : value.type === 'held' ? `held by ${value.by}` : `void`;
+        return h('input', {
+            attrs: {type: 'text', required: true},
+            props: {value: formatted, pattern: "(map \\d+,\\d+|held by \\d+|void)"},
+            on: {
+                input: (e) => {
+                    const target = /** @type{HTMLInputElement} */(e.target);
+                    target.setCustomValidity("");
+                    if (!target.checkValidity()) {
+                        target.setCustomValidity("Enter [map $x,$y] OR [held by $id] OR [void]");
+                    } else {
+                        let words = target.value.split(" ");
+                        switch (words[0]) {
+                            case 'map':
+                                let [x, y] = words[1].split(",").map((word) => parseInt(word));
+                                if (!world.tiles.findAny({walkable: true, position: {x, y}})) {
+                                    target.setCustomValidity("Not a walkable tile");
+                                } else {
+                                    object.location = {type: 'map', x, y};
+                                    drawAll();
+                                }
+                                break;
+                            case 'held':
+                                let id = parseInt(words[2]);
+                                if (!world.entities.findAny({id, inventory: Table.ANY})) {
+                                    target.setCustomValidity("Not an entity that has an inventory");
+                                } else {
+                                    object.location = {type: 'held', by: id};
+                                    drawAll();
+                                }
+                                break;
+                            case 'void':
+                                object.location = {type: 'void'};
+                                drawAll();
+                        }
+                    }
+                    target.reportValidity();
+                },
+            },
+        })
+    }
+    
+    function formatValue(object, column, value) {
+        if (value === undefined) return "";
+        switch (column) {
+            case 'id': return value;
+            case 'type': return editType(object);
+            case 'location': return editLocation(object, value);
+            case 'hp': return editNumber(object, 'hp');
+            case 'inventory': return value.map(entity => `${entity.type}.${entity.id}`).join(", ") || "(empty)";
+            case 'ai': return editAi(object, value);
+            case 'shape': return editShape(object, value);
+            case 'fg': return editColor(object, value);
+            case 'renderOrder': return editNumber(object, 'renderOrder');
+            case 'blocksMovement': return editBoolean(object, 'blocksMovement');
+            case 'fighter': return h('span', [
+                editNumberWithLabel(value, 'maxHp'),
+                editNumberWithLabel(value, 'defense'),
+                editNumberWithLabel(value, 'attack'),
+            ]);
+            case 'holdable': return editBoolean(object, 'holdable');
+            case 'consumable': return h('span', [
+                value.type, ": ",
+                ...Object.keys(value)
+                    .filter((k) => typeof value[k] === 'number')
+                    .map((k) => editNumberWithLabel(value, k))
+            ]);
         }
-        return value.toString();
+        return JSON.stringify(value); // fallback if there's no better UI
     }
 
     let vnodeHeader1 = [];

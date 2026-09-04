@@ -25,7 +25,7 @@ let components = {
         return {fighter: {maxHp, defense, attack}};
     },
     enemy(hp, defense, attack) {
-        return {blocksMovement: true, ...this.fighter(hp, defense, attack)};
+        return {holdable: false, blocksMovement: true, ...this.fighter(hp, defense, attack)};
     },
     holdable() {
         return {blocksMovement: false, holdable: true};
@@ -40,10 +40,11 @@ world = {
     entities: new Table('Entities', ['location', 'hp', 'inventory', 'ai'],
         {
             player: {
-                shape: "@", fg: "hsl(60 100% 50%)", renderOrder: 1, blocksMovement: false, ...components.fighter(30, 2, 5),
+                shape: "@", fg: "hsl(60 100% 50%)", renderOrder: 1, blocksMovement: false, holdable: false,
+                ...components.fighter(30, 2, 5),
                 get inventory() { return world && world.entities.findAll({location: {type: 'held', by: world.player.id}}); },
             },
-            corpse: {shape: "%", fg: "hsl(  0 20% 50%)", renderOrder: 9, blocksMovement: false},
+            corpse: {shape: "%", fg: "hsl(  0 20% 50%)", renderOrder: 9, blocksMovement: false, holdable: false},
             troll:  {shape: "T", fg: "hsl(120 60% 50%)", renderOrder: 2, ...components.enemy(10, 0, 3)},
             orc:    {shape: "o", fg: "hsl(100 30% 50%)", renderOrder: 2, ...components.enemy(16, 1, 4)},
             health_potion: {shape: "!", fg: "rgb(127 0 255)", renderOrder: 3, ...components.holdable(), consumable: {type: 'heal', amount: 4}},
