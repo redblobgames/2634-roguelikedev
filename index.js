@@ -7,7 +7,7 @@
 
 import { RNG, Map as RotMap, FOV } from "./third-party/rotjs/index.js";
 import { Table } from "./table.js";
-import { print, screenSize, drawAll, Layer, setupInputHandlers } from "./interface.js";
+import { screenSize, drawAll, Layer, setupInputHandlers } from "./interface.js";
 
 /**
  * @import { Action } from "./interface.js"
@@ -60,10 +60,16 @@ world = {
         }
     ),
     player: null,
+
+    /** @typedef {Array<string | {entity: number|null, faction: 'friendly'|'enemy'|'neutral', text: string}>} LogMessage */
+    /** @type{Array<LogMessage>} */
+    messages: [],
+
     fov: new FOV.PreciseShadowcasting((x, y) =>
         world.tiles.findAny({position: {x, y}})?.transparent
             && !world.entities.findFirst({location: {type: 'map', x, y}, blocksView: true})
     ),
+
     nextTurn() {
         // let enemies move
         for (let entity of world.entities.findAll({ai: Table.ANY})) {
@@ -140,6 +146,31 @@ world = {
     },
 
 };
+
+/**
+ * @param {TemplateStringsArray} strings
+ * @param {Array<any>} values
+ */
+function print(strings, ...values) {
+    const MAX_MESSAGE_LINES = 100;
+    /** @type{LogMessage} */
+    let message = [];
+    for (let i = 0; i < strings.length; i++) {
+        message.push(strings[i]);
+        if (i < values.length) {
+            let v = values[i];
+            if (world.entities.object.isPrototypeOf(v)) {
+                message.push({faction:  v === world.player? 'friendly' : 'enemy', entity: v.id, text: v.type});
+            } else {
+                message.push({faction: 'neutral', entity: null, text: v.toString()});
+            }
+        }
+    }
+    world.messages.push(message);
+    world.messages.splice(0, world.messages.length - MAX_MESSAGE_LINES);
+    drawAll();
+}
+
 
 function generateDungeon() {
     const types = ['floor', 'wall'];
