@@ -436,55 +436,25 @@ export function drawAll() {
 }
 
 
-const MAX_MESSAGE_LINES = 100;
-/** @type{Array<Array<[snabbdom.VNodeData | null, snabbdom.VNodeChildren]>>} */
-let messages = [];
+
 /** @type{Element | snabbdom.VNode} */
 let messagesVnode = document.querySelector("#messages");
 
 export function drawMessages() {
     const {h} = snabbdom;
-    let vnodeRows = messages.map(
+    let vnodeRows = world.messages.map(
         (message) => h('div',
             message.map((m) =>
-                h('span', m[0], m[1]))
+                (typeof m === 'object')
+                    ? h('span', {attrs: {class: m.faction}}, m.text)
+                    : h('span', m)
+            )
         )
     );
     messagesVnode = snabbdomPatch(messagesVnode, h("div#messages", vnodeRows));
 
     let element = /** @type{HTMLElement} */(messagesVnode.elm);
     element.scrollTop = element.scrollHeight; // Scroll to the bottom
-}
-
-export function print(strings, ...values) {
-    const {h} = snabbdom;
-    /** @type{Array<[any, snabbdom.VNodeChildren]>} */
-    let message = [];
-    for (let i = 0; i < strings.length; i++) {
-        message.push([null, strings[i]]);
-        if (i < values.length) {
-            let v = values[i];
-            if (v === world.player) {
-                message.push([
-                    {attrs: {class: "player"}, dataset: {entityid: v.id}},
-                    "player"
-                ]);
-            } else if (world.entities.object.isPrototypeOf(v)) {
-                message.push([
-                    {attrs: {class: "entity"}, dataset: {entityid: v.id}},
-                    v.type
-                ]);
-            } else {
-                message.push([
-                    {attrs: {class: "other"}},
-                    v.toString()
-                ]);
-            }
-        }
-    }
-    messages.push(message);
-    messages.splice(0, messages.length - MAX_MESSAGE_LINES);
-    drawMessages();
 }
 
 export function showTemporaryMessage(text) {
