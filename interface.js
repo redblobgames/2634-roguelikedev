@@ -354,6 +354,7 @@ export function drawTable(table) {
             case 'shape': return editShape(object, value);
             case 'fg': return editColor(object, value);
             case 'renderOrder': return editNumber(object, 'renderOrder');
+            case 'blocksView': return editBoolean(object, 'blocksView');
             case 'blocksMovement': return editBoolean(object, 'blocksMovement');
             case 'fighter': return h('span', [
                 editNumberWithLabel(value, 'maxHp'),
