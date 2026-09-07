@@ -651,7 +651,16 @@ export const Layer = {
     default: {
         get visible() { return true; },
 
+        SAVE: null, // HACK: this is temporary, for testing, until the menu system is implemented
         async handleKeyDown(event) {
+            if (event.key === 's') {
+                this.SAVE = world.serialize();
+                return;
+            }
+            if (event.key === 'r' && this.SAVE) {
+                world.deserialize(this.SAVE);
+                return;
+            }
             let action = keyToAction(event);
             if (action.type === 'none') return;
 

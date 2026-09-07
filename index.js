@@ -65,6 +65,25 @@ world = {
     /** @type{Array<LogMessage>} */
     messages: [],
 
+    serialize() {
+        return {
+            playerId: this.player.id,
+            entities: this.entities.serialize(),
+            tiles: this.tiles.serialize(),
+            messages: this.messages,
+            rngState: RNG.getState(),
+        };
+    },
+
+    deserialize(save) {
+        this.entities.deserialize(save.entities);
+        this.tiles.deserialize(save.tiles);
+        this.messages = save.messages;
+        this.player = this.entities.findExactlyOne({id: save.playerId});
+        RNG.setState(save.rngState);
+        drawAll();
+    },
+
     fov: new FOV.PreciseShadowcasting((x, y) =>
         world.tiles.findAny({position: {x, y}})?.transparent
             && !world.entities.findFirst({location: {type: 'map', x, y}, blocksView: true})
