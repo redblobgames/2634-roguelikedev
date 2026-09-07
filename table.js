@@ -229,4 +229,49 @@ export class Table {
         if (results.length === 0) return null;
         return results[0];
     }
+
+    /** Serialization
+     * @returns {Array<object>}
+     */
+    serialize() {
+        let save = [];
+        for (let row of this.rows) {
+            let out = {}
+            for (let column of this.columns) { // the serialization uses external names
+                let key = this.columnMap[column];
+                // Note that we want to check if the row itself has
+                // the value because there are inherited computed
+                // properties like 'inventory' that are in
+                // this.columns, but aren't defined per row.
+                if (Object.hasOwn(row, key)) out[column] = row[key];
+            }
+            save.push(out);
+        }
+        return save;
+    }
+
+    /** Deserialization
+     * @param {Array<object>} save
+     */
+    deserialize(save) {
+        // First erase the existing data
+        this.rows = [];
+        for (let index of Object.values(this.indexes)) index.clear();
+
+        // Insert the rows and add the columns to the indexes
+        this._highestId = 0;
+        for (let obj of save) {
+            let row = {};
+            this._highestId = Math.max(this._highestId, obj.id);
+            for (let column of this.columns) {
+                let key = this.columnMap[column];
+                if (obj[column] !== undefined) row[key] = obj[column];
+            }
+            for (let column of Object.keys(this.indexes)) {
+                this.#indexAdd(column, row);
+            }
+            Object.setPrototypeOf(row, this.readonlyPrototypes[obj.type]);
+            this.rows.push(row);
+        }
+    }
 }

@@ -104,3 +104,41 @@ test('Table rows can only mutate self columns', () => {
         r1.nonexistent = 50;
     });
 });
+
+test('Table can be serialized to array of strings', () => {
+    let prototypes = {
+        goblin: { hp: 10, ai: 'aggressive' }
+    };
+    let table = new Table('test', ['position'], prototypes);
+    let r1 = table.create('goblin', { position: [0, 0] });
+    let r2 = table.create('goblin', { position: [1, 1] });
+
+    let serialized = table.serialize();
+    assert.deepStrictEqual(serialized, [
+        {id: 1, type: 'goblin', position: [0, 0]},
+        {id: 2, type: 'goblin', position: [1, 1]},
+    ]);
+});
+
+test('Table can be deserialized, and prototypes and indexes work', () => {
+    let prototypes = {
+        goblin: { hp: 10, ai: 'aggressive' }
+    };
+    let table1 = new Table('test', ['position'], prototypes);
+    let table2 = new Table('test', ['position'], prototypes);
+    let r1 = table1.create('goblin', { position: [0, 0] });
+    let r2 = table1.create('goblin', { position: [1, 1] });
+
+    let save = table1.serialize();
+    table1.deserialize([]);
+    assert.deepStrictEqual(table1.rows, []);
+    assert.deepStrictEqual(table1._highestId, 0);
+    table2.deserialize(save);
+    assert.strictEqual(table2.rows.length, 2);
+    assert.strictEqual(table2.indexes.id.size, 2);
+    assert.deepStrictEqual(table2._highestId, 2);
+    let r3 = table2.create('goblin', { position: [2, 2] });
+    assert.strictEqual(r3.id, 3);
+    assert.deepStrictEqual(table2.findAny({id: 1}).position, [0, 0]);
+    assert.deepStrictEqual(table2.findAny({id: 1}).hp, 10);
+});
