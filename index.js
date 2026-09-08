@@ -60,6 +60,7 @@ world = {
         }
     ),
     player: null,
+    saveGame: null,
 
     /** @typedef {Array<string | {entity: number|null, faction: 'friendly'|'enemy'|'neutral', text: string}>} LogMessage */
     /** @type{Array<LogMessage>} */
@@ -75,16 +76,17 @@ world = {
     },
 
     serialize() {
-        return {
+        return JSON.stringify({
             playerId: this.player.id,
             entities: this.entities.serialize(),
             tiles: this.tiles.serialize(),
             messages: this.messages,
             rngState: RNG.getState(),
-        };
+        });
     },
 
     deserialize(save) {
+        save = JSON.parse(save);
         this.entities.deserialize(save.entities);
         this.tiles.deserialize(save.tiles);
         this.messages = save.messages;
@@ -113,6 +115,10 @@ world = {
      */
     async handlePlayerAction(action) {
         switch (action.type) {
+            case 'quit':
+                world.saveGame = world.serialize();
+                Layer.mainmenu.visible = true;
+                return false;
             case 'wait':
                 return true;
             case 'get': {
@@ -458,5 +464,6 @@ function handleAi(enemy) {
 }
 
 setupInputHandlers(world);
-world.new();
+world.new(); // to set up the player; we will discard the map soon
+Layer.mainmenu.visible = true;
 drawAll();
