@@ -163,7 +163,8 @@ function bgColorAtTile(tile) {
 export function drawWorld(world) {
     let player = world.player;
     /** @type{HTMLElement} */(document.querySelector("#health-bar-fg")).style.width = player.fighter ? `${Math.ceil(100*world.player.hp/world.player.fighter.maxHp)}%` : "0";
-    document.querySelector("#health-bar-text").textContent = world.player.fighter ?` HP: ${world.player.hp} / ${world.player.fighter.maxHp}` : ` Player is dead! `;
+    document.querySelector("#health-bar-text").textContent = world.player.fighter ?` HP: ${world.player.hp} / ${world.player.fighter.maxHp}` : ` dead `;
+    Layer.gameover.updateVisibility();
 
     display.clear();
     for (let tile of world.tiles.rows) {
@@ -594,7 +595,9 @@ function makeMapLocationPicker({el, check, draw=null}) {
 
 export const Layer = {
     gameover: {
+        el: document.querySelector("#game-over"),
         get visible() { return world.player.hp === 0; },
+        updateVisibility() { this.el.classList.toggle('visible', this.visible); },
     },
 
     inventory: makeInventoryPicker({
