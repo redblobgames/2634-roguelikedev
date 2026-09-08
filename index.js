@@ -65,6 +65,15 @@ world = {
     /** @type{Array<LogMessage>} */
     messages: [],
 
+    new() {
+        this.messages = [];
+        this.entities.clear();
+        this.tiles.clear();
+        this.player = this.entities.create('player', {location: {type: 'void'}});
+        this.player.hp = this.player.fighter.maxHp;
+        generateDungeon();
+    },
+
     serialize() {
         return {
             playerId: this.player.id,
@@ -204,15 +213,9 @@ function generateDungeon() {
 
     let rooms = digger.getRooms();
 
-    // Create the player, or move existing player to this map
+    // Move the player to the first room
     let [playerX, playerY] = rooms[0].getCenter();
-    let playerLocation = {type: 'map', x: playerX, y: playerY};
-    if (!world.player) {
-        world.player = world.entities.create('player', {location: playerLocation});
-        world.player.hp = world.player.fighter.maxHp;
-    } else {
-        world.player.location = playerLocation;
-    }
+    world.player.location = {type: 'map', x: playerX, y: playerY};
 
     // Create monsters in each room
     const maxMonstersPerRoom = 3;
@@ -455,5 +458,5 @@ function handleAi(enemy) {
 }
 
 setupInputHandlers(world);
-generateDungeon();
+world.new();
 drawAll();
