@@ -85,6 +85,21 @@
             }
         }
 
+        #main-menu {
+            grid-area: game;
+            height: 100%;
+            color: white;
+            background: black;
+            background-image: url("third-party/menu_background.png");
+            background-position: center center;
+            background-repeat: no-repeat;
+            background-size: contain;
+            kbd {
+                background: hsl(0 50% 30%);
+                color: yellow;
+            }
+        }
+
         #instructions {
             grid-area: instructions;
             background: hsl(60 10% 10%);
@@ -218,7 +233,8 @@
       </div>
       <div id="messages"></div>
       <div id="message-overlay"></div>
-      <div id="game-over" class="overlay">You have died.</div>
+      <div id="main-menu" class="overlay">TOMBS OF THE ANCIENT KINGS<ul></ul></div>
+      <div id="game-over" class="overlay">You have died. <ul><li><kbd>Esc</kbd> to main menu</li></ul></div>
       <div id="inventory-use" class="overlay"></div>
       <div id="inventory-drop" class="overlay"></div>
     </div>
