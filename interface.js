@@ -111,6 +111,7 @@ function getDirectionFromKey(event) {
    | {type: 'item'}
    | {type: 'drop'}
    | {type: 'look'}
+   | {type: 'quit'}
    | {type: 'none'}
      } Action
  *
@@ -126,6 +127,7 @@ function keyToAction(event) {
         i:          {type: 'item'},
         d:          {type: 'drop'},
         ['/']:      {type: 'look'},
+        Escape:     {type: 'quit'},
     };
 
     let movement = getDirectionFromKey(event);
@@ -594,10 +596,42 @@ function makeMapLocationPicker({el, check, draw=null}) {
 }
 
 export const Layer = {
+    mainmenu: {
+        _visible: false,
+        el: document.querySelector("#main-menu"),
+        updateVisibility() {
+            this.el.classList.toggle('visible', this.visible);
+            let html = `<li><kbd>N</kbd> Play a new game</li>`;
+            if (world.saveGame) html += `<li><kbd>C</kbd> Continue last game</li>`;
+            this.el.querySelector("ul").innerHTML = html;
+        },
+        get visible() { return this._visible; },
+        set visible(v) { this._visible = v; this.updateVisibility(); },
+        handleKeyDown(event) {
+            if (event.key === 'c' || event.key === 'n') {
+                event.preventDefault();
+                this.visible = false;
+                if (event.key === 'c') {
+                    world.deserialize(world.saveGame);
+                } else {
+                    world.new();
+                }
+                drawAll();
+            }
+        },
+    },
+
     gameover: {
         el: document.querySelector("#game-over"),
-        get visible() { return world.player.hp === 0; },
+        get visible() { return world.player.hp === 0 && !Layer.mainmenu.visible; },
         updateVisibility() { this.el.classList.toggle('visible', this.visible); },
+        handleKeyDown(event) {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                Layer.mainmenu.visible = true;
+                this.updateVisibility();
+            }
+        },
     },
 
     inventory: makeInventoryPicker({
@@ -654,16 +688,7 @@ export const Layer = {
     default: {
         get visible() { return true; },
 
-        SAVE: null, // HACK: this is temporary, for testing, until the menu system is implemented
         async handleKeyDown(event) {
-            if (event.key === 's') {
-                this.SAVE = world.serialize();
-                return;
-            }
-            if (event.key === 'r' && this.SAVE) {
-                world.deserialize(this.SAVE);
-                return;
-            }
             let action = keyToAction(event);
             if (action.type === 'none') return;
 
