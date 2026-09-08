@@ -74,6 +74,16 @@
                 color: yellow;
             }
         }
+        #game-over {
+            background: hsl(0 50% 50% / 0.5);
+            color: white;
+            height: 6em;
+            align-content: center; /* vertical */
+            kbd {
+                background: hsl(0 50% 30%);
+                color: yellow;
+            }
+        }
 
         #instructions {
             grid-area: instructions;
@@ -208,6 +218,7 @@
       </div>
       <div id="messages"></div>
       <div id="message-overlay"></div>
+      <div id="game-over" class="overlay">You have died.</div>
       <div id="inventory-use" class="overlay"></div>
       <div id="inventory-drop" class="overlay"></div>
     </div>
