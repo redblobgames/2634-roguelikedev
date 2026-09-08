@@ -59,9 +59,6 @@ export class Table {
                 this.prototypeColumns.add(column);
             }
         }
-        this._highestId = 0;
-        this.rows = /** @type{Array<object>} */([]);
-        this.indexes = /** @type{Record<string, Map<number|string, Array<object>>>} */({});
 
         // Construct a prototype object for this table, and backing fields/indexes
         const table = this;
@@ -73,7 +70,6 @@ export class Table {
 
             let index = Table.INDEX[column];
             if (index) {
-                this.indexes[column] = new Map();
                 let internalKey = `__${column}`;
                 this.columnMap[column] = internalKey;
                 this.inverseColumnMap[internalKey] = column;
@@ -97,6 +93,18 @@ export class Table {
                 // child object to be able to set this
                 this.object[column] = undefined;
             }
+        }
+
+        this.clear();
+    }
+
+    /** Clear all the data but not the type information (e.g. prototypes, columns, etc.) */
+    clear() {
+        this._highestId = 0;
+        this.rows = /** @type{Array<object>} */([]);
+        this.indexes = /** @type{Record<string, Map<number|string, Array<object>>>} */({});
+        for (let column of this.columns) {
+            if (Table.INDEX[column]) this.indexes[column] = new Map();
         }
     }
 
@@ -254,12 +262,9 @@ export class Table {
      * @param {Array<object>} save
      */
     deserialize(save) {
-        // First erase the existing data
-        this.rows = [];
-        for (let index of Object.values(this.indexes)) index.clear();
+        this.clear();
 
         // Insert the rows and add the columns to the indexes
-        this._highestId = 0;
         for (let obj of save) {
             let row = {};
             this._highestId = Math.max(this._highestId, obj.id);
