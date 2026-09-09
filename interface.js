@@ -112,6 +112,7 @@ function getDirectionFromKey(event) {
    | {type: 'drop'}
    | {type: 'look'}
    | {type: 'quit'}
+   | {type: 'stairs'}
    | {type: 'none'}
      } Action
  *
@@ -127,6 +128,7 @@ function keyToAction(event) {
         i:          {type: 'item'},
         d:          {type: 'drop'},
         ['/']:      {type: 'look'},
+        ['>']:      {type: 'stairs'},
         Escape:     {type: 'quit'},
     };
 
@@ -169,6 +171,7 @@ export function drawWorld(world) {
     let player = world.player;
     /** @type{HTMLElement} */(document.querySelector("#health-bar-fg")).style.width = player.fighter ? `${Math.ceil(100*world.player.hp/world.player.fighter.maxHp)}%` : "0";
     document.querySelector("#health-bar-text").textContent = world.player.fighter ?` HP: ${world.player.hp} / ${world.player.fighter.maxHp}` : ` dead `;
+    document.querySelector("#current-floor").textContent = `Floor: ${world.floor}`;
     Layer.gameover.updateVisibility();
 
     display.clear();

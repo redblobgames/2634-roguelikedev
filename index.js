@@ -53,6 +53,7 @@ world = {
             fireball_scroll: {shape: "~", fg: "rgb(255 0 0)", renderOrder: 3, ...components.holdable(), consumable: {type: 'fireball', damage: 12, radius: 3}},
         }
     ),
+    floor: -1,
     tiles: new Table('Tiles', ['position', 'light', 'maxLight'],
         {
             floor:  {shape: ' ', walkable: true,  transparent: true },
@@ -68,11 +69,34 @@ world = {
     messages: [],
 
     new() {
+        this.floor = 1;
         this.messages = [];
         this.entities.clear();
         this.tiles.clear();
         this.player = this.entities.create('player', {location: {type: 'void'}});
         this.player.hp = this.player.fighter.maxHp;
+        generateDungeon();
+    },
+
+    generateFloor() {
+        for (let entity of this.entities.findAll({})) {
+            // The player and anything they hold goes to the next
+            // level. Everything else gets removed.
+            if (entity === world.player) continue;
+            if (entity.location.type === 'held' && entity.location.by === world.player.id) continue;
+
+            // NOTE: to express this query in the Table class, we
+            // would need to support NOT {id: player.id}, NOT
+            // {location: {type: 'held', by: player.id}}. But our
+            // Table class doesn't support NOT queries.
+
+            // NOTE: this removal is O(N^2), but would be O(N) if the
+            // Table class offered a removeIf(predicate). N is small
+            // for this project.
+            this.entities.remove(entity);
+        }
+        this.tiles.clear();
+        this.floor += 1;
         generateDungeon();
     },
 
@@ -82,6 +106,7 @@ world = {
             entities: this.entities.serialize(),
             tiles: this.tiles.serialize(),
             messages: this.messages,
+            floor: this.floor,
             rngState: RNG.getState(),
         });
     },
@@ -91,6 +116,7 @@ world = {
         this.entities.deserialize(save.entities);
         this.tiles.deserialize(save.tiles);
         this.messages = save.messages;
+        this.floor = save.floor;
         this.player = this.entities.findExactlyOne({id: save.playerId});
         RNG.setState(save.rngState);
         drawAll();
@@ -174,6 +200,17 @@ world = {
                     world.player.location = {type: 'map', x: newX, y: newY};
                     return true;
                 }
+            }
+            case 'stairs': {
+                let tile = world.tiles.findAny({type: 'stairs', position: {x: world.player.location.x, y: world.player.location.y}});
+                if (!tile) {
+                    print `There are no stairs here.`;
+                    return false;
+                }
+
+                world.generateFloor();
+                print `You descend the staircase.`;
+                return true;
             }
         }
 
