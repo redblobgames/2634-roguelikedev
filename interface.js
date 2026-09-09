@@ -367,10 +367,15 @@ export function drawTable(table) {
             case 'renderOrder': return editNumber(object, 'renderOrder');
             case 'blocksView': return editBoolean(object, 'blocksView');
             case 'blocksMovement': return editBoolean(object, 'blocksMovement');
+            case 'level': return h('span', [
+                editNumberWithLabel(value, 'level'),
+                editNumberWithLabel(value, 'xp'),
+            ]);
             case 'fighter': return h('span', [
                 editNumberWithLabel(value, 'maxHp'),
                 editNumberWithLabel(value, 'defense'),
                 editNumberWithLabel(value, 'attack'),
+                editNumberWithLabel(value, 'xpGiven'),
             ]);
             case 'holdable': return editBoolean(object, 'holdable');
             case 'consumable': return h('span', [
@@ -702,7 +707,7 @@ export const Layer = {
 
             event.preventDefault();
             if (await world.handlePlayerAction(action)) {
-                world.nextTurn();
+                await world.nextTurn();
             }
         },
 

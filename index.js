@@ -21,11 +21,11 @@ const randint = RNG.getUniformInt.bind(RNG);
  * components. These values are shared among all instances.
  */
 let components = {
-    fighter(maxHp, defense, attack) {
-        return {fighter: {maxHp, defense, attack}};
+    fighter(maxHp, defense, attack, xpGiven) {
+        return {fighter: {maxHp, defense, attack, xpGiven}};
     },
-    enemy(hp, defense, attack) {
-        return {holdable: false, blocksMovement: true, ...this.fighter(hp, defense, attack)};
+    enemy(hp, defense, attack, xpGiven) {
+        return {holdable: false, blocksMovement: true, ...this.fighter(hp, defense, attack, xpGiven)};
     },
     holdable() {
         return {blocksView: false, blocksMovement: false, holdable: true};
@@ -37,16 +37,16 @@ let components = {
  */
 let world; // HACK: circular dependency workaround
 world = {
-    entities: new Table('Entities', ['location', 'hp', 'inventory', 'ai'],
+    entities: new Table('Entities', ['location', 'hp', 'level', 'fighter', 'ai', 'inventory'],
         {
             player: {
                 shape: "@", fg: "hsl(60 100% 50%)", renderOrder: 1, blocksView: false, blocksMovement: false, holdable: false,
-                ...components.fighter(30, 2, 5),
+                ...components.fighter(30, 2, 5, 0),
                 get inventory() { return world && world.entities.findAll({location: {type: 'held', by: world.player.id}}); },
             },
             corpse: {shape: "%", fg: "hsl(  0 20% 50%)", renderOrder: 9, blocksView: false, blocksMovement: false, holdable: false},
-            troll:  {shape: "T", fg: "hsl(120 60% 50%)", renderOrder: 2, blocksView: true, ...components.enemy(10, 0, 3)},
-            orc:    {shape: "o", fg: "hsl(100 30% 50%)", renderOrder: 2, blocksView: false, ...components.enemy(16, 1, 4)},
+            troll:  {shape: "T", fg: "hsl(120 60% 50%)", renderOrder: 2, blocksView: true, ...components.enemy(10, 0, 3, 100)},
+            orc:    {shape: "o", fg: "hsl(100 30% 50%)", renderOrder: 2, blocksView: false, ...components.enemy(16, 1, 4, 35)},
             health_potion: {shape: "!", fg: "rgb(127 0 255)", renderOrder: 3, ...components.holdable(), consumable: {type: 'heal', amount: 4}},
             lightning_potion: {shape: "~", fg: "rgb(255 255 0)", renderOrder: 3, ...components.holdable(), consumable: {type: 'lightning', damage: 20, range: 5}},
             confusion_scroll: {shape: "~", fg: "rgb(207 63 255)", renderOrder: 3, ...components.holdable(), consumable: {type: 'confusion', turns: 10}},
@@ -73,8 +73,9 @@ world = {
         this.messages = [];
         this.entities.clear();
         this.tiles.clear();
-        this.player = this.entities.create('player', {location: {type: 'void'}});
+        this.player = this.entities.create('player', {location: {type: 'void'}, level: {level: 1, xp: 0}});
         this.player.hp = this.player.fighter.maxHp;
+        this.player.fighter = {maxHp: 100, attack: 5, defense: 9};
         generateDungeon();
     },
 
@@ -127,10 +128,18 @@ world = {
             && !world.entities.findFirst({location: {type: 'map', x, y}, blocksView: true})
     ),
 
-    nextTurn() {
+    get experienceToNextLevel() {
+        // The Python tutorial puts these constants into the Level
+        // component but I don't want to serialize them. I want to
+        // instead put them into the spreadsheet as a formula, but I
+        // don't have spreadsheet formulas yet.
+        return 200 + world.player.level.level * 150;
+    },
+
+    async nextTurn() {
         // let enemies move
         for (let entity of world.entities.findAll({ai: Table.ANY})) {
-            handleAi(entity);
+            await handleAi(entity);
         }
         drawAll();
     },
@@ -191,7 +200,7 @@ world = {
 
                 let blockingEntity = world.entities.findAny({blocksMovement: true, location: {type: 'map', x: newX, y: newY}});
                 if (blockingEntity?.fighter) {
-                    handleCombat(world.player, blockingEntity);
+                    await handleCombat(world.player, blockingEntity);
                     return true;
                 } else if (blockingEntity) {
                     print `You cannot walk through ${blockingEntity}.`;
@@ -324,23 +333,45 @@ function adjustHealth(entity, by) {
     return change;
 }
 
-function handleCombat(attacker, defender) {
+async function handleCombat(attacker, defender) {
     let changed = adjustHealth(defender, -Math.max(0, attacker.fighter.attack - defender.fighter.defense));
     if (changed < 0) {
         print `${attacker} attacks ${defender} for ${-changed} hp.`;
     } else {
         print `${attacker} attacks ${defender} but does no damage.`;
     }
-    checkForDeath(defender);
+    await checkForDeath(defender);
 }
 
-function checkForDeath(actor) {
+async function checkForDeath(actor) {
     if (actor.hp === 0) {
         print `${actor} is dead!`;
+        await checkForXpGranted(actor);
         actor.type = 'corpse';
         actor.ai = undefined;
     }
 }
+
+async function checkForXpGranted(actor) {
+    // For now, assume that only the player has a level and gains xp
+    if (!actor.fighter) return;
+    if (actor.fighter.xpGiven === 0) return;
+    if (actor === world.player) return;
+
+    world.player.level.xp += actor.fighter.xpGiven;
+    print `You gain ${actor.fighter.xpGiven} experience points.`;
+    await checkForLevelUp();
+}
+
+async function checkForLevelUp() {
+    if (world.player.level.xp > world.experienceToNextLevel) {
+        world.player.level.xp -= world.experienceToNextLevel;
+        world.player.level.level++;
+        print `You advance to level ${world.player.level.level}!`;
+        // TODO: now we need to bring up the screen to choose which stat to improve, and based on the result, increase one of world.player.fighter stats
+    }
+}
+
 
 async function handleConsumable(entity) {
     switch (entity.consumable.type) {
@@ -369,7 +400,7 @@ async function handleConsumable(entity) {
             let damaged = -adjustHealth(closest.target, -entity.consumable.damage);
             print `A lightning bolt strikes the ${closest.target} with a loud thunder, for ${damaged} damage!`;
             entity.location = {type: 'void'};
-            checkForDeath(closest.target);
+            await checkForDeath(closest.target);
             return true;
         }
         case 'confusion': {
@@ -408,7 +439,7 @@ async function handleConsumable(entity) {
                 if (target.location.type === 'map' && distanceBetween(target.location, position) <= entity.consumable.radius) {
                     let damaged = -adjustHealth(target, -entity.consumable.damage);
                     print `The ${target} is engulfed in a fiery explosion, taking ${damaged} damage!`;
-                    checkForDeath(target);
+                    await checkForDeath(target);
                     targetsHit = true;
                 }
             }
@@ -442,7 +473,7 @@ function distanceBetween(p, q) {
     return Math.max(Math.abs(p.x - q.x), Math.abs(p.y - q.y));
 }
 
-function handleAi(enemy) {
+async function handleAi(enemy) {
     const MIN_VISIBILITY = 0.2;
     if (enemy.ai === undefined) return;
     switch (enemy.ai[0].type) {
@@ -457,7 +488,7 @@ function handleAi(enemy) {
                 let location = {type: 'map', x: enemy.location.x + dx, y: enemy.location.y + dy};
                 let entity = world.entities.findAny({location});
                 if (entity === world.player) { // walked into the player
-                    handleCombat(enemy, entity);
+                    await handleCombat(enemy, entity);
                 } else if (entity?.blocksMovement) { // walked into an object/enemy
                 } else if (world.tiles.findAny({walkable: true, position: {x: location.x, y: location.y}})) { // move to an open tile
                     enemy.location = location;
@@ -493,7 +524,7 @@ function handleAi(enemy) {
 
             if (closestDistance === 0 && world.player.fighter) {
                 // Attack the player
-                handleCombat(enemy, world.player);
+                await handleCombat(enemy, world.player);
             } else {
                 // Move to a tile closer to the player
                 enemy.location = {type: 'map', x: closestNeighbor.position.x, y: closestNeighbor.position.y};
