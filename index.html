@@ -145,6 +145,18 @@
             align-self: center; /* vertical */
         }
 
+        #current-floor {
+            grid-area: message-area;
+            width: max-content;
+            height: min-content;
+            padding: 4px;
+            background: hsl(200 50% 40%);
+            color: white;
+            justify-self: end;
+            font-family: var(--monospace), monospace;
+            font-size: 0.6em;
+        }
+
         #messages {
             grid-area: message-area;
             width: 100%;
@@ -233,6 +245,7 @@
       </div>
       <div id="messages"></div>
       <div id="message-overlay"></div>
+      <div id="current-floor"></div>
       <div id="main-menu" class="overlay">TOMBS OF THE ANCIENT KINGS<ul></ul></div>
       <div id="game-over" class="overlay">You have died. <ul><li><kbd>Esc</kbd> to main menu</li></ul></div>
       <div id="inventory-use" class="overlay"></div>
