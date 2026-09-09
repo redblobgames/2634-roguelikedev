@@ -55,8 +55,9 @@ world = {
     ),
     tiles: new Table('Tiles', ['position', 'light', 'maxLight'],
         {
-            floor: {walkable: true,  transparent: true },
-            wall:  {walkable: false, transparent: false},
+            floor:  {shape: ' ', walkable: true,  transparent: true },
+            wall:   {shape: ' ', walkable: false, transparent: false},
+            stairs: {shape: '>', walkable: true,  transparent: true },
         }
     ),
     player: null,
@@ -222,6 +223,10 @@ function generateDungeon() {
     // Move the player to the first room
     let [playerX, playerY] = rooms[0].getCenter();
     world.player.location = {type: 'map', x: playerX, y: playerY};
+
+    // Create stairs in the last room
+    let centerOfLastRoom = rooms.at(-1).getCenter();
+    world.tiles.findAny({position: {x: centerOfLastRoom[0], y: centerOfLastRoom[1]}}).type = 'stairs';
 
     // Create monsters in each room
     const maxMonstersPerRoom = 3;

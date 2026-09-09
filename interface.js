@@ -138,12 +138,12 @@ function keyToAction(event) {
 const BG_COLOR = {
     shroud: [0, 0, 0],
     explored: {
-        floor: [50, 50, 150],
-        wall: [0, 0, 100],
+        true: [50, 50, 150],
+        false: [0, 0, 100],
     },
     visible: {
-        floor: [200, 180, 50],
-        wall: [130, 110, 50],
+        true: [200, 180, 50],
+        false: [130, 110, 50],
     },
 };
 const lerp = (a, b, t) => a * (1-t) + b * t;
@@ -152,15 +152,18 @@ function bgColorAtTile(tile) {
     let rgb = lerp3(
         lerp3(
             BG_COLOR.shroud,
-            BG_COLOR.explored[tile.type],
+            BG_COLOR.explored[tile.walkable],
             tile.maxLight
         ),
-        BG_COLOR.visible[tile.type],
+        BG_COLOR.visible[tile.walkable],
         tile.light
     );
     return `rgb(${rgb})`;
 }
-
+function fgColorAtTile(tile) {
+    let rgb = lerp3([0, 0, 0], [255, 255, 255], tile.maxLight);
+    return `rgb(${rgb})`;
+}
 
 export function drawWorld(world) {
     let player = world.player;
@@ -170,10 +173,12 @@ export function drawWorld(world) {
 
     display.clear();
     for (let tile of world.tiles.rows) {
-        // In the 2020 version of the Python tutorial, the tiles are
-        // blank and we only need to draw the background color.
-        display.draw(tile.position.x, tile.position.y, ' ',
-            "purple" /* should never see this */,
+        // Because my colors vary smoothly and aren't binary
+        // dark/light I'm not storing them in the tile structure.
+        display.draw(
+            tile.position.x, tile.position.y,
+            tile.shape,
+            fgColorAtTile(tile),
             bgColorAtTile(tile)
         );
     }
