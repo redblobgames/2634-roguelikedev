@@ -257,10 +257,55 @@ function print(strings, ...values) {
 }
 
 
+function getMaxValueForFloor(weightedChancesByFloor, floor) {
+    let currentValue = 0;
+    for (let [key, value] of weightedChancesByFloor) {
+        if (key > floor) break;
+        currentValue = value;
+    }
+    return currentValue;
+}
+
+function getEntitiesAtRandom(weightedChancesByFloor, numberOfEntities, floor) {
+    /** @type{Record<string, number>} */
+    let choices = {};
+    for (let [key, values] of Object.entries(weightedChancesByFloor)) {
+        if (key > floor) break; // assume they are sorted
+        for (let [type, weight] of Object.entries(values)) {
+            choices[type] = weight;
+        }
+    }
+    return Array.from({length: numberOfEntities},
+        (_) => RNG.getWeightedValue(choices)
+    );
+}
+
 function generateDungeon() {
+    const maxItemsByFloor = [
+        [1, 1],
+        [4, 2],
+    ];
+    const maxMonstersByFloor = [
+        [1, 2],
+        [4, 3],
+        [6, 5],
+    ];
+    const itemChances = {
+        0: {health_potion: 35},
+        2: {confusion_scroll: 10},
+        4: {lightning_potion: 25},
+        6: {fireball_scroll: 25},
+    };
+    const enemyChances = {
+        0: {orc: 80},
+        3: {troll: 15},
+        5: {troll: 30},
+        7: {troll: 60},
+    };
+
     const types = ['floor', 'wall'];
     const digger = new RotMap.Uniform(screenSize.x, screenSize.y, {
-        roomWidth: [4, 8],
+        roomWidth: [3, 10],
         roomHeight: [3, 6],
         roomDugPercentage: 70,
         timeLimit: 500,
@@ -279,15 +324,15 @@ function generateDungeon() {
     world.tiles.findAny({position: {x: centerOfLastRoom[0], y: centerOfLastRoom[1]}}).type = 'stairs';
 
     // Create monsters in each room
-    const maxMonstersPerRoom = 3;
+    const maxMonstersPerRoom = getMaxValueForFloor(maxMonstersByFloor, world.floor);
     for (let room of rooms.slice(1)) { // No monsters in the player's starting room
         let numMonsters = randint(0, maxMonstersPerRoom);
-        for (let i = 0; i < numMonsters; i++) {
+        let monsters = getEntitiesAtRandom(enemyChances, numMonsters, world.floor);
+        for (let type of monsters) {
             let x = randint(room.getLeft(), room.getRight()),
                 y = randint(room.getTop(), room.getBottom());
             let location = {type: 'map', x, y};
             if (!world.entities.findAny({location})) {
-                let type = randint(0, 3) === 0? 'troll' : 'orc';
                 let enemy = world.entities.create(type, {location, hp: 0, ai: [{type: 'hostile'}]});
                 enemy.hp = enemy.fighter.maxHp;
             }
@@ -295,24 +340,16 @@ function generateDungeon() {
     }
 
     // Create items in each room
-    const maxItemsPerRoom = 2;
+    const maxItemsPerRoom = getMaxValueForFloor(maxItemsByFloor, world.floor);
     for (let room of rooms) {
         let numItems = randint(0, maxItemsPerRoom);
-        for (let i = 0; i < numItems; i++) {
+        let items = getEntitiesAtRandom(itemChances, numItems, world.floor);
+        for (let type of items) {
             let x = randint(room.getLeft(), room.getRight()),
                 y = randint(room.getTop(), room.getBottom());
             let location = {type: 'map', x, y};
             if (!world.entities.findAny({location})) {
-                let itemChance = randint(0, 9);
-                if (itemChance < 7) {
-                    world.entities.create('health_potion', {location});
-                } else if (itemChance < 8) {
-                    world.entities.create('fireball_scroll', {location});
-                } else if (itemChance < 9) {
-                    world.entities.create('confusion_scroll', {location});
-                } else {
-                    world.entities.create('lightning_potion', {location});
-                }
+                world.entities.create(type, {location});
             }
         }
     }
