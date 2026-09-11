@@ -192,6 +192,10 @@ world = {
                 await Layer.look.waitForAnswer();
                 return false;
             }
+            case 'character': {
+                await Layer.charactersheet.waitForAnswer();
+                return false;
+            }
             case 'move': {
                 let newX = world.player.location.x + action.dx;
                 let newY = world.player.location.y + action.dy;

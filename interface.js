@@ -110,6 +110,7 @@ function getDirectionFromKey(event) {
    | {type: 'wait'}
    | {type: 'item'}
    | {type: 'drop'}
+   | {type: 'character'}
    | {type: 'look'}
    | {type: 'quit'}
    | {type: 'stairs'}
@@ -127,6 +128,7 @@ function keyToAction(event) {
         g:          {type: 'get'},
         i:          {type: 'item'},
         d:          {type: 'drop'},
+        c:          {type: 'character'},
         ['/']:      {type: 'look'},
         ['>']:      {type: 'stairs'},
         Escape:     {type: 'quit'},
@@ -732,6 +734,39 @@ export const Layer = {
             <li><kbd>a</kbd> Constitution (+20 HP, from ${world.player.fighter.maxHp})</li>
             <li><kbd>b</kbd> Strength (+1 attack, from ${world.player.fighter.attack})</li>
             <li><kbd>c</kbd> Agility (+1 defense, from ${world.player.fighter.defense})</li>
+            </ul>`;
+        },
+    },
+
+    charactersheet: {
+        el: document.querySelector("#character-sheet"),
+        _waiting: null,
+        get visible() { return this._waiting !== null; },
+        waitForAnswer() {
+            this.draw();
+            return new Promise((resolve) => {
+                this.el.classList.add('visible');
+                this._waiting = {
+                    resolve: (answer) => {
+                        this.el.classList.remove('visible');
+                        resolve(answer);
+                    },
+                };
+             });
+        },
+        handleKeyDown(event) {
+            event.preventDefault();
+            let waiting = this._waiting;
+            this._waiting = null;
+            waiting.resolve();
+        },
+        draw() {
+            this.el.innerHTML = `<ul>
+            <li>Level: ${world.player.level.level}</li>
+            <li>XP: ${world.player.level.xp}</li>
+            <li>XP for next level: ${world.experienceToNextLevel}</li>
+            <li>Attack: ${world.player.fighter.attack}</li>
+            <li>Defense: ${world.player.fighter.defense}</li>
             </ul>`;
         },
     },
