@@ -95,6 +95,13 @@
                 color: cyan;
             }
         }
+        #character-sheet {
+            background: hsl(300 30% 50% / 0.5);
+            color: white;
+            ul {
+                column-count: 1;
+            }
+        }
 
         #main-menu {
             grid-area: game;
@@ -260,6 +267,7 @@
       <div id="main-menu" class="overlay">TOMBS OF THE ANCIENT KINGS<ul></ul></div>
       <div id="game-over" class="overlay">You have died. <ul><li><kbd>Esc</kbd> to main menu</li></ul></div>
       <div id="level-up" class="overlay"></div>
+      <div id="character-sheet" class="overlay"></div>
       <div id="inventory-use" class="overlay"></div>
       <div id="inventory-drop" class="overlay"></div>
     </div>
