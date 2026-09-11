@@ -698,6 +698,44 @@ export const Layer = {
         },
     }),
 
+    levelup: {
+        el: document.querySelector("#level-up"),
+        _waiting: null,
+        get visible() { return this._waiting !== null; },
+        waitForAnswer() {
+            this.draw();
+            return new Promise((resolve) => {
+                this.el.classList.add('visible');
+                this._waiting = {
+                    resolve: (answer) => {
+                        this.el.classList.remove('visible');
+                        resolve(answer);
+                    },
+                };
+             });
+        },
+        handleKeyDown(event) {
+            let answer = {
+                a: {type: 'constitution', by: 20},
+                b: {type: 'strength', by: 1},
+                c: {type: 'agility', by: 1},
+            }[event.key];
+            if (answer) {
+                event.preventDefault();
+                let waiting = this._waiting;
+                this._waiting = null;
+                waiting.resolve(answer);
+            }
+        },
+        draw() {
+            this.el.innerHTML = `<ul>
+            <li><kbd>a</kbd> Constitution (+20 HP, from ${world.player.fighter.maxHp})</li>
+            <li><kbd>b</kbd> Strength (+1 attack, from ${world.player.fighter.attack})</li>
+            <li><kbd>c</kbd> Agility (+1 defense, from ${world.player.fighter.defense})</li>
+            </ul>`;
+        },
+    },
+
     default: {
         get visible() { return true; },
 

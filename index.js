@@ -364,12 +364,29 @@ async function checkForXpGranted(actor) {
 }
 
 async function checkForLevelUp() {
-    if (world.player.level.xp > world.experienceToNextLevel) {
-        world.player.level.xp -= world.experienceToNextLevel;
-        world.player.level.level++;
-        print `You advance to level ${world.player.level.level}!`;
-        // TODO: now we need to bring up the screen to choose which stat to improve, and based on the result, increase one of world.player.fighter stats
+    if (world.player.level.xp <= world.experienceToNextLevel) return;
+
+    print `You advance to level ${world.player.level.level + 1}!`;
+    let statToIncrease = await Layer.levelup.waitForAnswer();
+    switch (statToIncrease.type) {
+        case 'constitution': {
+            world.player.fighter.maxHp += statToIncrease.by;
+            print `Your health improves!`;
+            break;
+        }
+        case 'strength': {
+            world.player.fighter.attack += statToIncrease.by;
+            print `You feel stronger!`;
+            break;
+        }
+        case 'agility': {
+            world.player.fighter.defense += statToIncrease.by;
+            print `Your movements are getting swifter!`;
+            break;
+        }
     }
+    world.player.level.xp -= world.experienceToNextLevel;
+    world.player.level.level++;
 }
 
 

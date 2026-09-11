@@ -84,6 +84,17 @@
                 color: yellow;
             }
         }
+        #level-up {
+            background: hsl(120 30% 40%);
+            color: white;
+            ul {
+                column-count: 1;
+            }
+            kbd {
+                background: hsl(150 50% 30%);
+                color: cyan;
+            }
+        }
 
         #main-menu {
             grid-area: game;
@@ -248,6 +259,7 @@
       <div id="current-floor"></div>
       <div id="main-menu" class="overlay">TOMBS OF THE ANCIENT KINGS<ul></ul></div>
       <div id="game-over" class="overlay">You have died. <ul><li><kbd>Esc</kbd> to main menu</li></ul></div>
+      <div id="level-up" class="overlay"></div>
       <div id="inventory-use" class="overlay"></div>
       <div id="inventory-drop" class="overlay"></div>
     </div>
