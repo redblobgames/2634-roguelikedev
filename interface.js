@@ -209,9 +209,7 @@ export function drawWorld(world) {
 }
 
 
-/** @type{Element | snabbdom.VNode} */
-let drawTableVnode = document.querySelector("#world-entities");
-export function drawTable(table) {
+export function drawTable(vnode, table, filterRow) {
     const {h} = snabbdom;
 
     function editType(object) {
@@ -238,6 +236,8 @@ export function drawTable(table) {
             attrs: {type: 'text', required: true, maxlength: 1},
             props: {value},
             on: {
+                focus: (e) =>
+                    /** @type{HTMLInputElement} */(e.target).select(),
                 input: (e) => {
                     const target = /** @type{HTMLInputElement} */(e.target);
                     if (!target.checkValidity()) return;
@@ -386,6 +386,15 @@ export function drawTable(table) {
                     .filter((k) => typeof value[k] === 'number')
                     .map((k) => editNumberWithLabel(value, k))
             ]);
+            case 'walkable': return editBoolean(object, 'walkable');
+            case 'transparent': return editBoolean(object, 'transparent');
+            case 'light':
+            case 'maxLight': {
+                return h('span',
+                    { style: {padding: "4px", color: "white", backgroundColor: bgColorAtTile(object)} },
+                    value.toFixed(1)
+                );
+            }
         }
         return JSON.stringify(value); // fallback if there's no better UI
     }
@@ -395,12 +404,19 @@ export function drawTable(table) {
         vnodeHeader1.push(h('th', column));
     }
     let vnodeRows1 = [];
-    for (let entity of table.rows) {
+    let filteredRows = table.rows.filter(filterRow);
+    for (let entity of filteredRows) {
         let vnodeCols = [];
         for (let column of table.columns) {
             vnodeCols.push(h('td', formatValue(entity, column, entity[column])));
         }
         vnodeRows1.push(h('tr', vnodeCols));
+    }
+    if (filteredRows.length < table.rows.length) {
+        vnodeRows1.push(h('tr', h('td',
+            {attrs: {colspan: table.columns.size}},
+            `... and ${table.rows.length - filteredRows.length} more rows ...`
+        )));
     }
 
     let vnodeHeader2 = [h('th', "type")];
@@ -417,6 +433,7 @@ export function drawTable(table) {
     }
 
     let vnodeTable = [
+        h('h3', table.name),
         h('table',
             {attrs: {rules: "all", border: "all"}},
             [
@@ -433,9 +450,11 @@ export function drawTable(table) {
         ),
     ];
 
-    drawTableVnode = snabbdomPatch(drawTableVnode, h("div#world-entities", vnodeTable));
+    return snabbdomPatch(vnode, h(vnode.sel, vnodeTable));
 }
 
+let vnodeTableEntities = snabbdom.toVNode(document.querySelector("#world-entities"));
+let vnodeTableTiles = snabbdom.toVNode(document.querySelector("#world-tiles"));
 export function drawAll() {
     for (let tile of world.tiles.rows) {
         tile.light = 0;
@@ -449,7 +468,10 @@ export function drawAll() {
         }
     });
     drawWorld(world);
-    drawTable(world.entities);
+    vnodeTableEntities = drawTable(vnodeTableEntities, world.entities, (row) => true);
+    vnodeTableTiles = drawTable(vnodeTableTiles, world.tiles,
+        (row) => Math.hypot(row.position.x - world.player.location.x, row.position.y - world.player.location.y) < 3
+    );
     drawMessages();
 }
 
