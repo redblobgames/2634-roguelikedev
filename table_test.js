@@ -142,3 +142,18 @@ test('Table can be deserialized, and prototypes and indexes work', () => {
     assert.deepStrictEqual(table2.findAny({id: 1}).position, [0, 0]);
     assert.deepStrictEqual(table2.findAny({id: 1}).hp, 10);
 });
+
+test('Table queries support ANY on columns or fields of objects', () => {
+    let prototypes = {
+        goblin: { hp: 10, ai: 'aggressive' }
+    };
+    let table = new Table('test', ['position'], prototypes);
+    let r1 = table.create('goblin', { position: {x: 0} });
+    let r2 = table.create('goblin', { position: {x: 0, y: 1} });
+    let r3 = table.create('goblin', {});
+
+    assert.deepStrictEqual(table.findAll({}), [r1, r2, r3]);
+    assert.deepStrictEqual(table.findAll({position: Table.ANY}), [r1, r2]);
+    assert.deepStrictEqual(table.findAll({position: {x: 0}}), [r1]);
+    assert.deepStrictEqual(table.findAll({position: {x: 0, y: Table.ANY}}), [r2]);
+});

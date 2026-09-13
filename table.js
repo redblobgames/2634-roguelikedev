@@ -206,7 +206,11 @@ export class Table {
                     if (typeof testAgainst !== 'object') return false;
                     if (Object.keys(pattern).length !== Object.keys(testAgainst).length) return false;
                     for (let [k, v] of Object.entries(pattern)) {
-                        if (v !== testAgainst[k]) return false;
+                        if (v === Table.ANY) {
+                            if (testAgainst[k] === undefined) return false;
+                        } else {
+                            if (v !== testAgainst[k]) return false;
+                        }
                     }
                 } else {
                     if (pattern !== testAgainst) return false;
