@@ -11,6 +11,13 @@ import { screenSize, drawAll, Layer, setupInputHandlers } from "./interface.js";
 
 /**
  * @import { Action } from "./interface.js"
+ *
+ * @typedef {
+   {type: 'void'}
+ | {type: 'map', x: number, y: number}
+ | {type: 'held', by: number}
+ | {type: 'equipped', by: number, slot: 'weapon'|'armor'}
+   } Location
  */
 
 RNG.setSeed(1234);
@@ -30,6 +37,9 @@ let components = {
     holdable() {
         return {blocksView: false, blocksMovement: false, holdable: true};
     },
+    equippable(slot, attack, defense) {
+        return {renderOrder: 3, ...components.holdable(), equippable: {slot, attack, defense}};
+    },
 };
 
 /**
@@ -37,12 +47,13 @@ let components = {
  */
 let world; // HACK: circular dependency workaround
 world = {
-    entities: new Table('Entities', ['location', 'hp', 'level', 'fighter', 'ai', 'inventory'],
+    entities: new Table('Entities', ['location', 'hp', 'level', 'fighter', 'ai', 'inventory', 'equipment'],
         {
             player: {
                 shape: "@", fg: "hsl(60 100% 50%)", renderOrder: 1, blocksView: false, blocksMovement: false, holdable: false,
                 ...components.fighter(30, 2, 5, 0),
                 get inventory() { return world && world.entities.findAll({location: {type: 'held', by: world.player.id}}); },
+                get equipment() { return world && world.entities.findAll({location: {type: 'equipped', by: world.player.id, slot: Table.ANY}}); },
             },
             corpse: {shape: "%", fg: "hsl(  0 20% 50%)", renderOrder: 9, blocksView: false, blocksMovement: false, holdable: false},
             troll:  {shape: "T", fg: "hsl(120 60% 50%)", renderOrder: 2, blocksView: true, ...components.enemy(10, 0, 3, 100)},
@@ -51,6 +62,10 @@ world = {
             lightning_potion: {shape: "~", fg: "rgb(255 255 0)", renderOrder: 3, ...components.holdable(), consumable: {type: 'lightning', damage: 20, range: 5}},
             confusion_scroll: {shape: "~", fg: "rgb(207 63 255)", renderOrder: 3, ...components.holdable(), consumable: {type: 'confusion', turns: 10}},
             fireball_scroll: {shape: "~", fg: "rgb(255 0 0)", renderOrder: 3, ...components.holdable(), consumable: {type: 'fireball', damage: 12, radius: 3}},
+            dagger: {shape: "/", fg: "rgb(0 191 255)", ...components.equippable('weapon', 2, 0)},
+            sword:  {shape: "/", fg: "rgb(0 191 255)", ...components.equippable('weapon', 4, 0)},
+            leather_armor:  {shape: "[", fg: "rgb(139 69 19)", ...components.equippable('armor', 0, 1)},
+            chain_mail:  {shape: "[", fg: "rgb(139 69 19)", ...components.equippable('armor', 0, 3)},
         }
     ),
     floor: -1,
@@ -76,6 +91,8 @@ world = {
         this.player = this.entities.create('player', {location: {type: 'void'}, level: {level: 1, xp: 0}});
         this.player.hp = this.player.fighter.maxHp;
         this.player.fighter = {maxHp: 100, attack: 5, defense: 2, xpGiven: 0};
+        this.entities.create('dagger', {location: {type: 'equipped', by: this.player.id, slot: 'weapon'}});
+        this.entities.create('leather_armor', {location: {type: 'equipped', by: this.player.id, slot: 'armor'}});
         generateDungeon();
     },
 
@@ -174,10 +191,9 @@ world = {
             }
             case 'item': {
                 let entity = await Layer.inventory.waitForAnswer();
-                if (entity === null) {
-                    return false; // action cancelled
-                }
-                return await handleConsumable(entity);
+                if (entity === null) return false; // action cancelled
+                if (entity.consumable) return await handleConsumable(entity);
+                if (entity.equippable) return handleEquippable(entity);
             }
             case 'drop': {
                 let entity = await Layer.drop.waitForAnswer();
@@ -293,8 +309,8 @@ function generateDungeon() {
     const itemChances = {
         0: {health_potion: 35},
         2: {confusion_scroll: 10},
-        4: {lightning_potion: 25},
-        6: {fireball_scroll: 25},
+        4: {lightning_potion: 25, sword: 5},
+        6: {fireball_scroll: 25, chain_mail: 15},
     };
     const enemyChances = {
         0: {orc: 80},
@@ -375,7 +391,11 @@ function adjustHealth(entity, by) {
 }
 
 async function handleCombat(attacker, defender) {
-    let changed = adjustHealth(defender, -Math.max(0, attacker.fighter.attack - defender.fighter.defense));
+    let effectiveAttack = attacker.fighter.attack;
+    let effectiveDefense = defender.fighter.defense;
+    for (let equipment of attacker?.equipment ?? []) effectiveAttack += equipment.equippable.attack;
+    for (let equipment of defender?.equipment ?? []) effectiveDefense += equipment.equippable.defense;
+    let changed = adjustHealth(defender, -Math.max(0, effectiveAttack - effectiveDefense));
     if (changed < 0) {
         print `${attacker} attacks ${defender} for ${-changed} hp.`;
     } else {
@@ -510,6 +530,18 @@ async function handleConsumable(entity) {
         }
     }
     throw `Unknown consumable type ${entity.consumable.type}`;
+}
+
+function handleEquippable(entity) {
+    let location = {type: 'equipped', by: world.player.id, slot: entity.equippable.slot};
+    let alreadyEquipped = world.entities.findAny({location});
+    if (alreadyEquipped) {
+        alreadyEquipped.location = {type: 'held', by: world.player.id};
+        print `You remove the ${alreadyEquipped}.`;
+    }
+    entity.location = location;
+    print `You equip the ${entity}.`;
+    return true;
 }
 
 function walkableTilesAdjacentTo(tile) {

@@ -313,20 +313,24 @@ export function drawTable(vnode, table, filterRow) {
     }
 
     function editLocation(object, value) {
-        let formatted = value.type === 'map'? `map ${value.x},${value.y}` : value.type === 'held' ? `held by ${value.by}` : `void`;
+        let formatted =
+            value.type === 'map'? `map ${value.x},${value.y}`
+                : value.type === 'held' ? `held by ${value.by}`
+                : value.type === 'equipped' ? `equipped by ${value.by} as ${value.slot}`
+                : `void`;
         return h('input', {
             attrs: {type: 'text', required: true},
-            props: {value: formatted, pattern: "(map \\d+,\\d+|held by \\d+|void)"},
+            props: {value: formatted, pattern: "(map \\d+,\\d+|held by \\d+|equipped by \\d+ as \\w+|void)"},
             on: {
                 input: (e) => {
                     const target = /** @type{HTMLInputElement} */(e.target);
                     target.setCustomValidity("");
                     if (!target.checkValidity()) {
-                        target.setCustomValidity("Enter [map $x,$y] OR [held by $id] OR [void]");
+                        target.setCustomValidity("Enter [map $x,$y] OR [held by $id] OR [equipped by $id as weapon|armor] OR [void]");
                     } else {
                         let words = target.value.split(" ");
                         switch (words[0]) {
-                            case 'map':
+                            case 'map': {
                                 let [x, y] = words[1].split(",").map((word) => parseInt(word));
                                 if (!world.tiles.findAny({walkable: true, position: {x, y}})) {
                                     target.setCustomValidity("Not a walkable tile");
@@ -335,18 +339,39 @@ export function drawTable(vnode, table, filterRow) {
                                     drawAll();
                                 }
                                 break;
-                            case 'held':
+                            }
+                            case 'held': {
                                 let id = parseInt(words[2]);
-                                if (!world.entities.findAny({id, inventory: Table.ANY})) {
-                                    target.setCustomValidity("Not an entity that has an inventory");
+                                if (!object.holdable) {
+                                    target.setCustomValidity(`${object.type} can't be held`);
+                                } else if (!world.entities.findAny({id, inventory: Table.ANY})) {
+                                    target.setCustomValidity("That has no inventory to hold things");
                                 } else {
                                     object.location = {type: 'held', by: id};
                                     drawAll();
                                 }
                                 break;
-                            case 'void':
+                            }
+                            case 'equipped': {
+                                let id = parseInt(words[2]);
+                                let slot = words[4];
+                                if (!object.equippable) {
+                                    target.setCustomValidity(`${object.type} can't be equipped`);
+                                } else if (object.equippable.slot !== slot) {
+                                    target.setCustomValidity(`${object.type} can't be equipped in ${slot}`);
+                                } else if (!world.entities.findAny({id, equipment: Table.ANY})) {
+                                    target.setCustomValidity("That can't equip anything");
+                                } else {
+                                    object.location = {type: 'equipped', by: id, slot};
+                                    drawAll();
+                                }
+                                break;
+                            }
+                            case 'void': {
                                 object.location = {type: 'void'};
                                 drawAll();
+                                break;
+                            }
                         }
                     }
                     target.reportValidity();
@@ -363,6 +388,7 @@ export function drawTable(vnode, table, filterRow) {
             case 'location': return editLocation(object, value);
             case 'hp': return editNumber(object, 'hp');
             case 'inventory': return value.map(entity => `${entity.type}.${entity.id}`).join(", ") || "(empty)";
+            case 'equipment': return value.map(entity => `${entity.type}.${entity.id}`).join(", ") || "(empty)";
             case 'ai': return editAi(object, value);
             case 'shape': return editShape(object, value);
             case 'fg': return editColor(object, value);
@@ -382,6 +408,12 @@ export function drawTable(vnode, table, filterRow) {
             case 'holdable': return editBoolean(object, 'holdable');
             case 'consumable': return h('span', [
                 value.type, ": ",
+                ...Object.keys(value)
+                    .filter((k) => typeof value[k] === 'number')
+                    .map((k) => editNumberWithLabel(value, k))
+            ]);
+            case 'equippable': return h('span', [
+                value.slot, ": ",
                 ...Object.keys(value)
                     .filter((k) => typeof value[k] === 'number')
                     .map((k) => editNumberWithLabel(value, k))
@@ -541,8 +573,8 @@ function makeInventoryPicker({el, action, filter}) {
         draw() {
             let keys = new Map();
             let html = ``;
-            let entities = filter(world.player.inventory)
-            if (world.player.inventory.length === 0) {
+            let entities = filter(world.player.inventory.concat(world.player.equipment))
+            if (world.player.equipment.length === 0 && world.player.inventory.length === 0) {
                 html = `<div>Your inventory is empty. Press <kbd>ESC</kbd> to cancel.</div>${html}`;
             } else if (entities.length === 0) {
                 html = `<div>You have nothing you can ${action}. Press <kbd>ESC</kbd> to cancel.</div>${html}`;
@@ -550,8 +582,9 @@ function makeInventoryPicker({el, action, filter}) {
                 html = `<ul>`;
                 entities.forEach((entity, i) => {
                     let key = String.fromCharCode(65 + i);
+                    let suffix = entity.location.type === 'equipped' ? " (E)" : "";
                     keys.set(key, entity);
-                    html += `<li><kbd>${key}</kbd> ${entity.type}.${entity.id}</li>`;
+                    html += `<li><kbd>${key}</kbd> ${entity.type}.${entity.id}${suffix}</li>`;
                 });
                 html += `</ul>`;
                 html = `<div>Select an item to ${action} it, or <kbd>ESC</kbd> to cancel.</div>${html}`;
@@ -674,7 +707,7 @@ export const Layer = {
     inventory: makeInventoryPicker({
         el: "#inventory-use",
         action: "use",
-        filter: (entities) => entities.filter((entity) => entity.consumable),
+        filter: (entities) => entities.filter((entity) => entity.consumable || (entity.equippable && entity.location.type === 'held')),
     }),
 
     drop: makeInventoryPicker({
