@@ -247,6 +247,12 @@
                 }
             }
         }
+
+        #key-list {
+            kbd {
+                background: #ddd;
+                font-weight: bold;
+            }
     </style>
   </head>
   <body>
@@ -270,6 +276,16 @@
       <div id="character-sheet" class="overlay"></div>
       <div id="inventory-use" class="overlay"></div>
       <div id="inventory-drop" class="overlay"></div>
+    </div>
+    <div id="key-list">
+      Keys: arrows to move,
+      <kbd>G</kbd>et an item from the floor,
+      <kbd>D</kbd>rop an item to the floor,
+      <kbd>I</kbd>tem to use an item,
+      <kbd>C</kbd>haracter sheet,
+      <kbd>/</kbd> to look around,
+      <kbd>&gt;</kbd> to take the stairs,
+      <kbd>Esc</kbd> to save &amp; quit to the menu
     </div>
     <h3>Developer tool: spreadsheets</h3>
     <div id="world-entities"></div>
